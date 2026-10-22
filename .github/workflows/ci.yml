@@ -33,7 +33,7 @@ jobs:
       test-flags: -race -covermode=atomic
       web-dir: web
       web-build-command: pnpm run check && pnpm run build
-      web-test-command: pnpm run test
+      web-test-command: pnpm run test:coverage
       frontend-coverage-file: web/coverage/lcov.info
       codecov-flag-go: backend
       codecov-flag-web: frontend
