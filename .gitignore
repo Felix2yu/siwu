@@ -1,0 +1,45 @@
+# Go 构建产物与本地数据
+/bin/*
+!/bin/.gitkeep
+/data/
+*.db
+*.db-wal
+*.db-shm
+secret.key
+
+# 前端依赖与产物
+node_modules/
+web/dist/
+web/coverage/
+web/.vite/
+
+# 内嵌产物：只保留占位文件
+internal/web/dist/*
+!internal/web/dist/.gitkeep
+
+# 测试与覆盖率
+coverage.out
+coverage.html
+
+# 编辑器/系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- AI Agent 生成目录（不进版本库，本地保留）----
+.workbuddy/
+.trae/
+.trea/
+.qoder/
+.opencode/
+.cursor/
+.claude/
+.codex/
+.gemini/
+.continue/
+.windsurf/
+.aider*
+
+# 本地环境
+.env
+.env.local

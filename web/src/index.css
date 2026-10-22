@@ -1,0 +1,74 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-void: oklch(0.17 0.012 265);
+  --color-panel: oklch(0.21 0.014 265);
+  --color-panel-2: oklch(0.245 0.016 265);
+  --color-line: oklch(0.31 0.016 265);
+  --color-line-soft: oklch(0.27 0.014 265);
+  --color-ink: oklch(0.93 0.006 265);
+  --color-muted: oklch(0.68 0.012 265);
+  --color-faint: oklch(0.55 0.012 265);
+  --color-accent: oklch(0.76 0.11 175);
+  --color-accent-soft: oklch(0.34 0.05 175);
+  --color-warn: oklch(0.82 0.13 85);
+  --color-danger: oklch(0.7 0.16 25);
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: auto;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* 细滚动条，避免在密集表格里抢视觉 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 4px;
+}
+
+.diff-add {
+  color: var(--color-accent);
+}

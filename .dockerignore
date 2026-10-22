@@ -1,0 +1,16 @@
+# 构建上下文只保留「装配」需要的东西：预编译二进制。
+# 注意：不得排除 bin/ —— 它是 Dockerfile 的 COPY 源（排除后会报 CopyIgnoredFile）。
+web/
+internal/
+cmd/
+docs/
+scripts/
+data/
+*.md
+.git/
+.github/
+.golangci.yml
+.editorconfig
+.gitattributes
+docker-compose.yml
+Makefile

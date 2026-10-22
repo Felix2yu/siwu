@@ -1,0 +1,29 @@
+services:
+  siwu:
+    image: ghcr.io/felix2yu/siwu:latest
+    container_name: siwu
+    ports:
+      - "8788:8788"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Asia/Shanghai
+      # 对外地址：决定 RSS 里自引用链接的域名
+      SIWU_BASE_URL: http://localhost:8788
+      # 配了口令则全站要登录（/api/healthz 与 /f/* 除外）
+      # SIWU_PASSWORD: change-me
+      # 订阅令牌：非空时 /f/*.xml 必须带 ?k=<token>
+      # SIWU_FEED_TOKEN: change-me-too
+      # 需要 JS 渲染 / 风控站点时，启用下面的 browser 服务并打开这一行
+      # SIWU_BROWSER_WS: ws://browser:9222
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  # 可选的渲染通道：siwu 镜像本身保持「只有二进制」，浏览器按需外挂。
+  # 启用：docker compose --profile browser up -d
+  browser:
+    image: chromedp/headless-shell:156.0.8078.48
+    profiles: ["browser"]
+    shm_size: "1gb"
+    restart: unless-stopped

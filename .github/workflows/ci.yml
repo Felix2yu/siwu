@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+  repository_dispatch:
+    types: [base-image-updated]
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    uses: Felix2yu/.github/.github/workflows/reusable-test.yml@v1
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    with:
+      go-dir: .
+      # cmd/siwu 带 //go:embed，前端未构建时 ./... 会报 no matching files
+      test-packages: ./internal/...
+      test-flags: -race -covermode=atomic
+      web-dir: web
+      web-build-command: pnpm run check && pnpm run build
+      web-test-command: pnpm run test
+      frontend-coverage-file: web/coverage/lcov.info
+      codecov-flag-go: backend
+      codecov-flag-web: frontend
+
+  image:
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: Felix2yu/.github/.github/workflows/reusable-image.yml@v1
+    with:
+      go-dir: .
+      main-package: ./cmd/siwu
+      binary-name: siwu
+      image-name: ghcr.io/felix2yu/siwu
+      web-dir: web
+      frontend-stage-command: bash scripts/build.sh --stage-only
+
+  release:
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    uses: Felix2yu/.github/.github/workflows/reusable-release.yml@v1
+    with:
+      go-dir: .
+      main-package: ./cmd/siwu
+      binary-name: siwu
+      web-dir: web
+      frontend-stage-command: bash scripts/build.sh --stage-only
