@@ -271,12 +271,16 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) probeFetch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		URL     string            `json:"url"`
-		Engine  string            `json:"engine"`
-		Headers map[string]string `json:"headers"`
-		Cookies map[string]string `json:"cookies"`
-		Proxy   string            `json:"proxy"`
-		WaitMS  int               `json:"wait_ms"`
+		URL          string            `json:"url"`
+		Engine       string            `json:"engine"`
+		Headers      map[string]string `json:"headers"`
+		Cookies      map[string]string `json:"cookies"`
+		Proxy        string            `json:"proxy"`
+		WaitMS       int               `json:"wait_ms"`
+		WaitSelector string            `json:"wait_selector"`
+		TimeoutSec   int               `json:"timeout_sec"`
+		BrowserWS    string            `json:"browser_ws"`
+		Charset      string            `json:"charset"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -290,7 +294,14 @@ func (s *Server) probeFetch(w http.ResponseWriter, r *http.Request) {
 	if engine == "" {
 		engine = model.EngineHTTP
 	}
-	req := model.Request{Headers: body.Headers, Cookies: body.Cookies, Proxy: body.Proxy, WaitMS: body.WaitMS, TimeoutSec: 45}
+	req := model.Request{
+		Headers: body.Headers, Cookies: body.Cookies, Proxy: body.Proxy,
+		WaitMS: body.WaitMS, WaitSelector: body.WaitSelector,
+		TimeoutSec: body.TimeoutSec, BrowserWS: body.BrowserWS, Charset: body.Charset,
+	}
+	if req.TimeoutSec <= 0 {
+		req.TimeoutSec = 45
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 	sess, err := s.Probe.Fetch(ctx, body.URL, engine, req)
@@ -336,6 +347,23 @@ func (s *Server) probeExtract(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": res.Items, "matched": res.Matched, "warnings": res.Warnings,
 	})
+}
+
+func (s *Server) probeArticle(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		SID     string        `json:"sid"`
+		Article model.Article `json:"article"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	res, err := s.Probe.Article(body.SID, body.Article)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) probeCount(w http.ResponseWriter, r *http.Request) {
@@ -748,9 +776,19 @@ func (s *Server) normalizeAndValidate(src *model.Source) error {
 			}
 		}
 	}
-	if strings.TrimSpace(src.Article.Content) != "" {
-		if err := validateSelector(src.Article.Content); err != nil {
-			return fmt.Errorf("正文选择器: %w", err)
+	for _, item := range []struct {
+		name string
+		sel  string
+	}{
+		{"正文选择器", src.Article.Content},
+		{"正文标题选择器", src.Article.Title},
+		{"正文时间选择器", src.Article.Date},
+	} {
+		if strings.TrimSpace(item.sel) == "" {
+			continue
+		}
+		if err := validateSelector(item.sel); err != nil {
+			return fmt.Errorf("%s: %w", item.name, err)
 		}
 	}
 	// 调度与通知策略的枚举与格式校验：宁可保存时报错，也不要运行期静默失效

@@ -1,12 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { Crosshair, Loader2, Play, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { ArrowLeft, Crosshair, Loader2, Play, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import { PageHead } from '../App'
-import { Badge, Button, Checkbox, Field, Input, Select, TextArea, cn } from '../components/ui'
-import type { Candidate, FieldSpec, RawItem, Source, Suggestion } from '../types'
-import { blankSource } from '../types'
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Field,
+  Input,
+  Select,
+  Switch,
+  TextArea,
+  cn,
+} from '../components/ui'
+import type { ArticlePreview, Candidate, FieldSpec, RawItem, Source, Suggestion } from '../types'
+import { applySourceDefaults, blankSource } from '../types'
 import type { SourceView } from '../types'
 
 const FIELD_NAMES = ['title', 'link', 'date', 'summary', 'category', 'content'] as const
@@ -79,6 +89,11 @@ export default function EditorPage() {
     queryFn: () => api.source(Number(id)),
     enabled: editing,
   })
+  const appSettings = useQuery({
+    queryKey: ['settings'],
+    queryFn: api.settings,
+    enabled: !editing,
+  })
 
   if (editing && existing.isLoading) {
     return <div className="p-6 text-[12px] text-faint">加载中…</div>
@@ -90,12 +105,19 @@ export default function EditorPage() {
       </div>
     )
   }
+  if (!editing && appSettings.isLoading) {
+    return <div className="p-6 text-[12px] text-faint">加载中…</div>
+  }
 
   // 用 key 强制重建表单状态，避免「数据到了再 setState」的 effect（会引发级联渲染）
   return (
     <EditorForm
       key={editing ? `source-${id}` : 'source-new'}
-      initial={existing.data ? toSource(existing.data) : blankSource()}
+      initial={
+        existing.data
+          ? toSource(existing.data)
+          : applySourceDefaults(blankSource(), appSettings.data?.defaults)
+      }
       editing={editing}
     />
   )
@@ -116,6 +138,12 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
   const [probeWarn, setProbeWarn] = useState<string[]>([])
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState('')
+  const [pickTarget, setPickTarget] = useState<'item' | 'article'>('item')
+  const [detail, setDetail] = useState<{ sid: string; url: string; title: string } | null>(null)
+  const [articleLink, setArticleLink] = useState('')
+  const [articlePicked, setArticlePicked] = useState('')
+  const [articleView, setArticleView] = useState<ArticlePreview | null>(null)
+  const [articleError, setArticleError] = useState('')
   const frameRef = useRef<HTMLIFrameElement>(null)
 
   const targets = useQuery({ queryKey: ['targets'], queryFn: api.targets })
@@ -135,6 +163,20 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
   }
 
   async function pickElement(xpath: string) {
+    if (pickTarget === 'article') {
+      if (!detail) return
+      try {
+        setArticlePicked(xpath)
+        const next = { ...draft.article, content: xpath }
+        patch((d) => void (d.article.content = xpath))
+        setMessage('已把选中元素写入正文选择器')
+        await runArticlePreview(detail.sid, next)
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : '正文抽取失败')
+      }
+      return
+    }
+    if (!sid) return
     try {
       setBusy('suggest')
       setPicked(xpath)
@@ -173,6 +215,79 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
     await runProbeExtract({ ...draft.extract, item: itemSel, fields }, draft.rules)
   }
 
+  function rememberArticleLink(items: RawItem[] | null | undefined) {
+    const link = (items ?? []).find((it) => it.link)?.link
+    if (!link) return
+    let abs = link
+    try {
+      abs = new URL(link, draft.url || undefined).toString()
+    } catch {
+      /* 相对链接补全失败就原样保留 */
+    }
+    setArticleLink((prev) => prev || abs)
+  }
+
+  async function runArticlePreview(sessionSid = detail?.sid ?? '', spec = draft.article) {
+    if (!sessionSid) {
+      setMessage('先点「预览正文」抓取一条详情页')
+      return
+    }
+    try {
+      setBusy('article')
+      setArticleError('')
+      const res = await api.probeArticle(sessionSid, spec)
+      setArticleView(res)
+      const chars = res.content_text.length
+      setMessage(
+        res.method === 'readability'
+          ? `readability 识别到正文，${chars} 字`
+          : `正文选择器命中，${chars} 字`,
+      )
+    } catch (err) {
+      const text = err instanceof Error ? err.message : '正文抽取失败'
+      setArticleView(null)
+      setArticleError(text)
+      setMessage(text)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function openDetail() {
+    const link = articleLink.trim()
+    if (!link) {
+      setMessage('先填一条详情页地址，或先抽取条目自动带入')
+      return
+    }
+    try {
+      setBusy('detail')
+      setMessage('')
+      setArticleError('')
+      setArticleView(null)
+      setArticlePicked('')
+      const res = await api.probeFetch({
+        url: link,
+        engine: draft.engine,
+        headers: linesToMap(headersText),
+        cookies: draft.request.cookies,
+        proxy: draft.request.proxy,
+        wait_ms: draft.request.wait_ms,
+        wait_selector: draft.request.wait_selector,
+        timeout_sec: draft.request.timeout_sec,
+        browser_ws: draft.request.browser_ws,
+        charset: draft.request.charset,
+      })
+      setDetail({ sid: res.sid, url: res.url, title: res.title })
+      setPickTarget('article')
+      setMessage('详情页已载入：在右侧点选正文容器，或在下方点「重新识别正文」')
+      await runArticlePreview(res.sid, draft.article)
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : '详情页抓取失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
   // 拾取器通过 postMessage 回传选中的元素；用 Effect Event 读最新 state 而不重订阅
   const onPicked = useEffectEvent((xpath: string) => {
     void pickElement(xpath)
@@ -182,11 +297,12 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
     function onMessage(e: MessageEvent) {
       const data = e.data as { source?: string; type?: string; xpath?: string } | null
       if (!data || data.source !== 'siwu-picker') return
-      if (data.type === 'picked' && data.xpath && sid) onPicked(data.xpath)
+      // 正文预览可能没经过列表预览，不能用 sid 作为拾取器的前置条件
+      if (data.type === 'picked' && data.xpath) onPicked(data.xpath)
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [sid])
+  }, [])
 
   async function fetchPreview() {
     if (!draft.url) {
@@ -203,11 +319,19 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
         cookies: draft.request.cookies,
         proxy: draft.request.proxy,
         wait_ms: draft.request.wait_ms,
+        wait_selector: draft.request.wait_selector,
+        timeout_sec: draft.request.timeout_sec,
+        browser_ws: draft.request.browser_ws,
+        charset: draft.request.charset,
       })
       setSid(res.sid)
       setPreviewMeta({ title: res.title, bytes: res.bytes })
       setSuggestion(null)
       setProbeItems([])
+      setPickTarget('item')
+      setDetail(null)
+      setArticleView(null)
+      setArticleError('')
       setMessage('预览已就绪：在右侧页面里点击要监控的条目')
     } catch (err) {
       setMessage(err instanceof Error ? err.message : '抓取失败')
@@ -221,7 +345,9 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
     try {
       setBusy('extract')
       const res = await api.probeExtract(sid, nextExtract, nextRules)
-      setProbeItems((res.items ?? []) as unknown as RawItem[])
+      const items = (res.items ?? []) as unknown as RawItem[]
+      setProbeItems(items)
+      rememberArticleLink(items)
       setProbeWarn(res.warnings ?? [])
       setMessage(`抽取命中 ${res.matched} 个节点，产出 ${res.items?.length ?? 0} 条`)
     } catch (err) {
@@ -260,7 +386,9 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
       return api.tryDraft(payload)
     },
     onSuccess: (res) => {
-      setProbeItems((res.items ?? []) as unknown as RawItem[])
+      const items = (res.items ?? []) as unknown as RawItem[]
+      setProbeItems(items)
+      rememberArticleLink(items)
       setProbeWarn(res.warnings ?? [])
       setMessage(res.error ? `试跑失败：${res.error}` : `试跑完成：${res.found} 条`)
     },
@@ -269,6 +397,7 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
 
   const targetList = targets.data ?? []
   const rows = useMemo(() => (Array.isArray(probeItems) ? probeItems : []), [probeItems])
+  const frameSid = pickTarget === 'article' && detail ? detail.sid : isHTML || isPage ? sid : ''
 
   return (
     <div className="flex h-full flex-col">
@@ -867,29 +996,84 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
             />
           </section>
 
-          <section className="mt-3 space-y-2 rounded border border-line-soft bg-panel/40 px-3 py-2">
-            <Checkbox
-              label="跟进详情页取正文（写入 RSS 正文）"
-              checked={draft.article.enabled}
-              onChange={(e) => patch((d) => void (d.article.enabled = e.target.checked))}
-            />
-            {draft.article.enabled ? (
-              <>
-                <Field label="正文选择器" hint="留空则用 readability 自动识别">
-                  <Input
-                    value={draft.article.content}
-                    placeholder="css:#zoom / xpath://div[@class='article']"
-                    onChange={(e) => patch((d) => void (d.article.content = e.target.value))}
+          {!isPage ? (
+            <section className="mt-3 space-y-2 rounded border border-line-soft bg-panel/40 px-3 py-2">
+              <Switch
+                label="跟进详情页取正文（写入 RSS 正文）"
+                checked={draft.article.enabled}
+                onChange={(next) => patch((d) => void (d.article.enabled = next))}
+              />
+              {draft.article.enabled ? (
+                <>
+                  <Field label="正文选择器" hint="留空则用 readability 自动识别">
+                    <Input
+                      value={draft.article.content}
+                      placeholder="css:#zoom / xpath://div[@class='article']"
+                      onChange={(e) => patch((d) => void (d.article.content = e.target.value))}
+                    />
+                  </Field>
+                  <div className="flex items-end gap-1.5">
+                    <Field label="详情页地址（预览用）" className="min-w-0 flex-1">
+                      <Input
+                        value={articleLink}
+                        placeholder="https://example.com/news/1"
+                        className="font-mono text-[12px]"
+                        onChange={(e) => setArticleLink(e.target.value)}
+                      />
+                    </Field>
+                    <Button
+                      variant="default"
+                      onClick={() => void openDetail()}
+                      disabled={busy === 'detail' || busy === 'article' || !articleLink.trim()}
+                      title="抓取这条详情页，在右侧预览并点选正文容器"
+                    >
+                      {busy === 'detail' ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Crosshair size={13} />
+                      )}
+                      预览正文
+                    </Button>
+                  </div>
+                  <Switch
+                    label="选择器未命中时回退 readability"
+                    checked={draft.article.readability}
+                    onChange={(next) => patch((d) => void (d.article.readability = next))}
                   />
-                </Field>
-                <Checkbox
-                  label="选择器未命中时回退 readability"
-                  checked={draft.article.readability}
-                  onChange={(e) => patch((d) => void (d.article.readability = e.target.checked))}
-                />
-              </>
-            ) : null}
-          </section>
+                  <details className="rounded border border-line-soft/70 px-2 py-1.5">
+                    <summary className="cursor-pointer text-[11px] text-muted">
+                      正文字段（可选）
+                    </summary>
+                    <div className="mt-1.5 space-y-1.5">
+                      <Field label="正文标题选择器" hint="留空沿用条目标题">
+                        <Input
+                          value={draft.article.title}
+                          className="font-mono text-[12px]"
+                          onChange={(e) => patch((d) => void (d.article.title = e.target.value))}
+                        />
+                      </Field>
+                      <Field label="发布时间选择器" hint="留空沿用列表里的日期">
+                        <Input
+                          value={draft.article.date}
+                          className="font-mono text-[12px]"
+                          onChange={(e) => patch((d) => void (d.article.date = e.target.value))}
+                        />
+                      </Field>
+                      <Field label="正文截断字符数" hint="0 表示不截断；只影响纯文本">
+                        <Input
+                          type="number"
+                          value={draft.article.max_chars}
+                          onChange={(e) =>
+                            patch((d) => void (d.article.max_chars = Number(e.target.value)))
+                          }
+                        />
+                      </Field>
+                    </div>
+                  </details>
+                </>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className="mt-3 space-y-2 rounded border border-line-soft bg-panel/40 px-3 py-2">
             <p className="text-[11px] uppercase tracking-wide text-muted">通知</p>
@@ -1000,135 +1184,174 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
         {/* 右：预览 / 抽取结果 */}
         <div className="flex min-h-0 flex-col">
           <div className="flex items-center gap-2 border-b border-line-soft px-4 py-2">
-            {isHTML || isPage ? (
-              <Button
-                onClick={() => void fetchPreview()}
-                disabled={busy === 'preview' || !draft.url}
-              >
-                {busy === 'preview' ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <RefreshCw size={13} />
-                )}
-                抓取预览
-              </Button>
+            {pickTarget === 'item' && (isHTML || isPage) ? (
+              <>
+                <Button
+                  onClick={() => void fetchPreview()}
+                  disabled={busy === 'preview' || !draft.url}
+                >
+                  {busy === 'preview' ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={13} />
+                  )}
+                  抓取预览
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => void runProbeExtract()}
+                  disabled={!sid || busy === 'extract'}
+                  title="用当前选择器在预览 DOM 上抽取"
+                >
+                  <Crosshair size={13} /> 按当前选择器抽取
+                </Button>
+              </>
             ) : null}
-            {isHTML || isPage ? (
-              <Button
-                variant="ghost"
-                onClick={() => void runProbeExtract()}
-                disabled={!sid || busy === 'extract'}
-                title="用当前选择器在预览 DOM 上抽取"
-              >
-                <Crosshair size={13} /> 按当前选择器抽取
-              </Button>
+            {pickTarget === 'article' && detail ? (
+              <>
+                <Button variant="ghost" onClick={() => setPickTarget('item')}>
+                  <ArrowLeft size={13} /> 返回列表预览
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => void runArticlePreview()}
+                  disabled={busy === 'article'}
+                  title="用当前正文选择器在详情页上重新识别"
+                >
+                  {busy === 'article' ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={13} />
+                  )}
+                  重新识别正文
+                </Button>
+              </>
             ) : null}
-            <span className="ml-auto font-mono text-[11px] text-faint">
-              {previewMeta
-                ? `${previewMeta.title || '（无标题）'} · ${(previewMeta.bytes / 1024).toFixed(1)} KB`
-                : ''}
-              {sid ? ` · sid ${sid.slice(0, 6)}` : ''}
+            <span className="ml-auto truncate font-mono text-[11px] text-faint">
+              {pickTarget === 'article' && detail
+                ? `${detail.title || '（无标题）'} · 详情页`
+                : previewMeta
+                  ? `${previewMeta.title || '（无标题）'} · ${(previewMeta.bytes / 1024).toFixed(1)} KB`
+                  : ''}
+              {pickTarget === 'item' && sid ? ` · sid ${sid.slice(0, 6)}` : ''}
             </span>
           </div>
 
           <div className="relative min-h-0 flex-1">
-            {(isHTML || isPage) && sid ? (
+            {frameSid ? (
               <iframe
+                key={frameSid}
                 ref={frameRef}
                 title="preview"
-                src={`/api/preview/${sid}`}
+                src={`/api/preview/${frameSid}`}
                 sandbox="allow-scripts"
                 className="absolute inset-0 h-full w-full border-0 bg-white"
               />
             ) : (
               <div className="flex h-full items-center justify-center px-6 text-center text-[12px] text-faint">
-                {draft.kind === 'json'
-                  ? '接口型不需要框选：填好 API 与字段后点右上「试跑」看结果'
-                  : draft.kind === 'rss'
-                    ? '订阅转发不需要框选：填好地址后点右上「试跑」，能解析就行'
-                    : '填好地址后点「抓取预览」，在页面里点击要监控的条目（悬停高亮，↑ 选父级，↓ 选子级）'}
+                {isHTML || isPage
+                  ? '填好地址后点「抓取预览」，在页面里点击要监控的条目（悬停高亮，↑ 选父级，↓ 选子级）'
+                  : draft.article.enabled
+                    ? '在左侧「正文」区填一条详情页地址，点「预览正文」，就能在右侧点选正文容器'
+                    : draft.kind === 'json'
+                      ? '接口型不需要框选：填好 API 与字段后点右上「试跑」看结果'
+                      : '订阅转发不需要框选：填好地址后点右上「试跑」，能解析就行'}
               </div>
             )}
           </div>
 
           <div className="flex h-[40%] min-h-[200px] shrink-0 flex-col overflow-auto border-t border-line-soft">
-            {suggestion ? (
-              <div className="border-b border-line-soft px-4 py-2">
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="text-[11px] uppercase tracking-wide text-muted">候选选择器</span>
-                  <Button size="sm" variant="ghost" onClick={applyFieldGuesses}>
-                    套用字段推断
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestion.candidates.map((c) => (
-                    <button
-                      key={`${c.kind}-${c.xpath}`}
-                      onClick={() => applyCandidate(c)}
-                      className={cn(
-                        'rounded border px-2 py-1 text-left font-mono text-[11px]',
-                        draft.extract.item === c.xpath
-                          ? 'border-accent/60 bg-accent/10 text-accent'
-                          : 'border-line text-muted hover:border-muted',
-                      )}
-                      title={c.xpath}
-                    >
-                      {c.label} · 命中 {c.count}
-                    </button>
-                  ))}
-                </div>
-                {suggestion.fields.length ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-faint">
-                    字段推断：
-                    {suggestion.fields.map((f) => (
-                      <span key={f.name} className="font-mono">
-                        {f.name}=<span className="text-muted">{f.text.slice(0, 16) || f.sel}</span>
+            {pickTarget === 'article' ? (
+              <ArticlePreviewPane
+                view={articleView}
+                error={articleError}
+                picked={articlePicked}
+                busy={busy}
+              />
+            ) : (
+              <>
+                {suggestion ? (
+                  <div className="border-b border-line-soft px-4 py-2">
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="text-[11px] uppercase tracking-wide text-muted">
+                        候选选择器
                       </span>
-                    ))}
+                      <Button size="sm" variant="ghost" onClick={applyFieldGuesses}>
+                        套用字段推断
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggestion.candidates.map((c) => (
+                        <button
+                          key={`${c.kind}-${c.xpath}`}
+                          onClick={() => applyCandidate(c)}
+                          className={cn(
+                            'rounded border px-2 py-1 text-left font-mono text-[11px]',
+                            draft.extract.item === c.xpath
+                              ? 'border-accent/60 bg-accent/10 text-accent'
+                              : 'border-line text-muted hover:border-muted',
+                          )}
+                          title={c.xpath}
+                        >
+                          {c.label} · 命中 {c.count}
+                        </button>
+                      ))}
+                    </div>
+                    {suggestion.fields.length ? (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-faint">
+                        字段推断：
+                        {suggestion.fields.map((f) => (
+                          <span key={f.name} className="font-mono">
+                            {f.name}=
+                            <span className="text-muted">{f.text.slice(0, 16) || f.sel}</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
-              </div>
-            ) : null}
 
-            <div className="flex items-center justify-between px-4 py-1.5">
-              <p className="text-[11px] uppercase tracking-wide text-muted">
-                抽取结果 <span className="font-mono text-faint">{rows.length}</span>
-              </p>
-              <div className="flex gap-1">
-                {probeWarn.map((w) => (
-                  <Badge key={w} tone="warn">
-                    {w}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-            {rows.length === 0 ? (
-              <p className="px-4 pb-4 text-[12px] text-faint">
-                还没有结果。先框选条目，或点「按当前选择器抽取」。
-              </p>
-            ) : (
-              <table className="w-full border-collapse text-[12px]">
-                <thead className="text-[11px] text-faint">
-                  <tr className="border-b border-line-soft">
-                    <th className="px-4 py-1 text-left font-normal">标题</th>
-                    <th className="px-2 py-1 text-left font-normal">日期</th>
-                    <th className="px-2 py-1 text-left font-normal">链接</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.slice(0, 30).map((it, i) => (
-                    <tr key={i} className="border-b border-line-soft/50">
-                      <td className="max-w-[280px] truncate px-4 py-1">{it.title || '—'}</td>
-                      <td className="whitespace-nowrap px-2 py-1 font-mono text-[11px] text-muted">
-                        {String(it.date || '—').slice(0, 19)}
-                      </td>
-                      <td className="max-w-[320px] truncate px-2 py-1 font-mono text-[11px] text-faint">
-                        {it.link}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                <div className="flex items-center justify-between px-4 py-1.5">
+                  <p className="text-[11px] uppercase tracking-wide text-muted">
+                    抽取结果 <span className="font-mono text-faint">{rows.length}</span>
+                  </p>
+                  <div className="flex gap-1">
+                    {probeWarn.map((w) => (
+                      <Badge key={w} tone="warn">
+                        {w}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                {rows.length === 0 ? (
+                  <p className="px-4 pb-4 text-[12px] text-faint">
+                    还没有结果。先框选条目，或点「按当前选择器抽取」。
+                  </p>
+                ) : (
+                  <table className="w-full border-collapse text-[12px]">
+                    <thead className="text-[11px] text-faint">
+                      <tr className="border-b border-line-soft">
+                        <th className="px-4 py-1 text-left font-normal">标题</th>
+                        <th className="px-2 py-1 text-left font-normal">日期</th>
+                        <th className="px-2 py-1 text-left font-normal">链接</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.slice(0, 30).map((it, i) => (
+                        <tr key={i} className="border-b border-line-soft/50">
+                          <td className="max-w-[280px] truncate px-4 py-1">{it.title || '—'}</td>
+                          <td className="whitespace-nowrap px-2 py-1 font-mono text-[11px] text-muted">
+                            {String(it.date || '—').slice(0, 19)}
+                          </td>
+                          <td className="max-w-[320px] truncate px-2 py-1 font-mono text-[11px] text-faint">
+                            {it.link}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1150,5 +1373,60 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
         </div>
       ) : null}
     </div>
+  )
+}
+
+function ArticlePreviewPane({
+  view,
+  error,
+  picked,
+  busy,
+}: {
+  view: ArticlePreview | null
+  error: string
+  picked: string
+  busy: string
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 border-b border-line-soft px-4 py-1.5">
+        <p className="text-[11px] uppercase tracking-wide text-muted">正文预览</p>
+        <div className="flex min-w-0 items-center gap-2">
+          {view?.method ? (
+            <Badge tone="accent">
+              {view.method === 'selector' ? '选择器命中' : 'readability 兜底'}
+            </Badge>
+          ) : null}
+          {picked ? (
+            <span className="truncate font-mono text-[10px] text-faint" title={picked}>
+              {picked}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="px-4 py-2">
+        {error ? (
+          <p className="text-[12px] text-danger">{error}</p>
+        ) : view ? (
+          <>
+            {view.title ? <p className="text-[13px] font-medium">{view.title}</p> : null}
+            {view.date ? (
+              <p className="mb-2 font-mono text-[11px] text-faint">{view.date}</p>
+            ) : null}
+            <div
+              className="article-preview mt-1"
+              // 正文已在 article.Extract 里用 bluemonday 净化
+              dangerouslySetInnerHTML={{ __html: view.content_html }}
+            />
+          </>
+        ) : (
+          <p className="text-[12px] text-faint">
+            {busy === 'article'
+              ? '正在识别正文…'
+              : '在右侧详情页点选正文容器，或点上方「重新识别正文」'}
+          </p>
+        )}
+      </div>
+    </>
   )
 }

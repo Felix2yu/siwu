@@ -15,12 +15,13 @@ import (
 	"golang.org/x/net/html"
 )
 
-// Result 是详情页抽取结果。
+// Result 是详情页抽取结果。Method 标明正文来自选择器还是 readability，供预览展示。
 type Result struct {
-	Title       string
-	Date        string
-	ContentHTML string
-	ContentText string
+	Title       string `json:"title"`
+	Date        string `json:"date"`
+	ContentHTML string `json:"content_html"`
+	ContentText string `json:"content_text"`
+	Method      string `json:"method"` // selector | readability
 }
 
 var policy = bluemonday.UGCPolicy()
@@ -56,6 +57,9 @@ func Extract(raw []byte, pageURL string, spec model.Article) (Result, error) {
 			}
 		}
 	}
+	if strings.TrimSpace(body) != "" {
+		out.Method = "selector"
+	}
 	if strings.TrimSpace(body) == "" && spec.Readability {
 		if u, err := url.Parse(pageURL); err == nil {
 			if art, err := readability.FromReader(bytes.NewReader(raw), u); err == nil {
@@ -63,6 +67,7 @@ func Extract(raw []byte, pageURL string, spec model.Article) (Result, error) {
 				if out.Title == "" {
 					out.Title = art.Title
 				}
+				out.Method = "readability"
 			}
 		}
 	}

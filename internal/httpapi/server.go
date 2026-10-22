@@ -89,6 +89,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/preview/{sid}", s.previewPage)
 	mux.HandleFunc("GET /picker.js", s.picker)
 	mux.HandleFunc("POST /api/probe/extract", s.probeExtract)
+	mux.HandleFunc("POST /api/probe/article", s.probeArticle)
 	mux.HandleFunc("POST /api/probe/count", s.probeCount)
 	mux.HandleFunc("POST /api/probe/suggest", s.probeSuggest)
 

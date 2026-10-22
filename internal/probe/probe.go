@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Felix2yu/siwu/internal/article"
 	"github.com/Felix2yu/siwu/internal/extract"
 	"github.com/Felix2yu/siwu/internal/fetch"
 	"github.com/Felix2yu/siwu/internal/model"
@@ -23,6 +24,7 @@ type Session struct {
 	URL       string
 	Title     string
 	HTML      []byte
+	Raw       []byte // 净化前的响应体，供正文抽取复用
 	FetchedAt time.Time
 }
 
@@ -76,7 +78,10 @@ func (p *Probe) Fetch(ctx context.Context, rawURL string, engine model.Engine, r
 		return nil, err
 	}
 	id := randomID()
-	sess := &Session{ID: id, URL: firstNonEmpty(resp.FinalURL, rawURL), Title: extract.TitleOf(body), HTML: safe, FetchedAt: time.Now()}
+	sess := &Session{
+		ID: id, URL: firstNonEmpty(resp.FinalURL, rawURL), Title: extract.TitleOf(body),
+		HTML: safe, Raw: body, FetchedAt: time.Now(),
+	}
 	p.mu.Lock()
 	if len(p.sessions) > 24 {
 		for k := range p.sessions {
@@ -104,6 +109,19 @@ func (p *Probe) Extract(id string, spec model.Extract, rules []model.Rule) (extr
 		return extract.Result{}, fmt.Errorf("预览会话已过期，请重新抓取页面")
 	}
 	return extract.HTML(s.HTML, s.URL, spec, rules)
+}
+
+// Article 在预览会话的原始 HTML 上跑正文抽取，行为与正式运行的「跟进详情页」一致。
+func (p *Probe) Article(id string, spec model.Article) (article.Result, error) {
+	s, ok := p.Get(id)
+	if !ok {
+		return article.Result{}, fmt.Errorf("预览会话已过期，请重新抓取页面")
+	}
+	raw := s.Raw
+	if len(raw) == 0 {
+		raw = s.HTML
+	}
+	return article.Extract(raw, s.URL, spec)
 }
 
 // Count 统计选择器命中数，并给前几个节点的文本作为样例。
