@@ -13,7 +13,7 @@
 - **按源自选抓取通道**：`http` 走纯请求，`browser` 走 CDP（本机 Chrome 或外置 headless-shell）
 - **清洗规则**：正则替换/提取、去前后缀、日期归一、去标签等 12 个算子，保存时校验 RE2
 - **过滤**：按标题/摘要/链接/分类做关键词或正则的包含与排除；条目级 `exclude` 选择器可剔除广告位
-- **正文入库**：跟进详情页取正文（选择器优先、readability 兜底），写入 RSS 的 `content:encoded`
+- **正文入库**：跟进详情页取正文（选择器优先、readability 兜底），写入 RSS 的 `content:encoded`；编辑器里可直接抓详情页预览并点选正文容器
 - **去重与更新**：`entry_key` + `content_hash` 双字段，支持只看新增 / 变更更新 / 变更留版本；`normalize` 正则让「只有访问量变了」不算更新
 - **页面快照**：区域选择、噪声正则、`min_changed_lines` 阈值、行级 diff，变化才产出条目并留存版本
 - **调度**：固定间隔或 cron（`0 9 * * 1-5`、`@every 2h`）、±10% 抖动、失败指数退避（上限 1h）、DB 原子租约
@@ -67,7 +67,9 @@ docker compose up -d
 | GET | `/api/events` | SSE：`run.start` / `run.finish` / `notify.ok` / `notify.fail` |
 | GET | `/api/export/opml` | 导出全部启用订阅为 OPML |
 | POST | `/api/notify/flush` | 立即冲刷 batch/digest 队列 |
+| GET / PUT | `/api/settings` | 新建源默认值（间隔、条数、保留天数、去重策略、正文入库）与系统信息 |
 | POST | `/api/probe/fetch`、`/api/probe/suggest`、`/api/probe/extract` | 框选：抓预览、推断选择器、试抽取 |
+| POST | `/api/probe/article` | 在详情页预览会话上抽取正文，返回 `method`（selector / readability） |
 
 ## 部署
 
