@@ -40,7 +40,7 @@ make dev / build / test / lint / fmt / docker / clean / smoke
 1. `gofmt -l ./cmd ./internal` 无输出
 2. `go vet ./...`
 3. `go test ./internal/...`（`cmd` 带 embed，测试范围不含 `./...`）
-4. `cd web && pnpm run check && pnpm run build`
+4. `cd web && pnpm run check && pnpm run build && pnpm run test`（`check` = tsc + eslint；`test` 是 vitest，CI 用 `test:coverage`）
 5. 改过前端或 embed 后：`./scripts/build.sh && ./scripts/smoke.sh`
 6. 涉及抓取逻辑时：至少用一个真实站点跑一次「试跑」，确认命中数不为 0
 
