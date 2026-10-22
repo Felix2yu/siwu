@@ -1,22 +1,55 @@
 @import 'tailwindcss';
 
-@theme {
-  --color-void: oklch(0.17 0.012 265);
-  --color-panel: oklch(0.21 0.014 265);
-  --color-panel-2: oklch(0.245 0.016 265);
-  --color-line: oklch(0.31 0.016 265);
-  --color-line-soft: oklch(0.27 0.014 265);
-  --color-ink: oklch(0.93 0.006 265);
-  --color-muted: oklch(0.68 0.012 265);
-  --color-faint: oklch(0.55 0.012 265);
-  --color-accent: oklch(0.76 0.11 175);
-  --color-accent-soft: oklch(0.34 0.05 175);
-  --color-warn: oklch(0.82 0.13 85);
-  --color-danger: oklch(0.7 0.16 25);
+/* 语义色都指向 --c-*，由 :root / .dark 两套变量切换；工具类本身不感知主题。 */
+@theme inline {
+  --color-void: var(--c-void);
+  --color-panel: var(--c-panel);
+  --color-panel-2: var(--c-panel-2);
+  --color-line: var(--c-line);
+  --color-line-soft: var(--c-line-soft);
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-accent: var(--c-accent);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-warn: var(--c-warn);
+  --color-danger: var(--c-danger);
   --font-sans:
     'Inter', ui-sans-serif, system-ui, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --c-void: oklch(0.972 0.004 265);
+  --c-panel: oklch(0.995 0.002 265);
+  --c-panel-2: oklch(0.955 0.006 265);
+  --c-line: oklch(0.86 0.008 265);
+  --c-line-soft: oklch(0.915 0.006 265);
+  --c-ink: oklch(0.24 0.014 265);
+  --c-muted: oklch(0.44 0.012 265);
+  --c-faint: oklch(0.56 0.012 265);
+  --c-accent: oklch(0.52 0.105 175);
+  --c-accent-soft: oklch(0.91 0.045 175);
+  --c-warn: oklch(0.55 0.12 70);
+  --c-danger: oklch(0.55 0.19 25);
+}
+
+.dark {
+  color-scheme: dark;
+  --c-void: oklch(0.17 0.012 265);
+  --c-panel: oklch(0.21 0.014 265);
+  --c-panel-2: oklch(0.245 0.016 265);
+  --c-line: oklch(0.31 0.016 265);
+  --c-line-soft: oklch(0.27 0.014 265);
+  --c-ink: oklch(0.93 0.006 265);
+  --c-muted: oklch(0.68 0.012 265);
+  --c-faint: oklch(0.55 0.012 265);
+  --c-accent: oklch(0.76 0.11 175);
+  --c-accent-soft: oklch(0.34 0.05 175);
+  --c-warn: oklch(0.82 0.13 85);
+  --c-danger: oklch(0.7 0.16 25);
 }
 
 html,
@@ -27,8 +60,8 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-void);
-  color: var(--color-ink);
+  background: var(--c-void);
+  color: var(--c-ink);
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.55;
@@ -42,7 +75,7 @@ body {
 }
 
 ::selection {
-  background: var(--color-accent-soft);
+  background: var(--c-accent-soft);
 }
 
 input,
@@ -56,7 +89,7 @@ button {
 /* 细滚动条，避免在密集表格里抢视觉 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-line) transparent;
+  scrollbar-color: var(--c-line) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -65,10 +98,100 @@ button {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: var(--color-line);
+  background: var(--c-line);
   border-radius: 4px;
 }
 
 .diff-add {
-  color: var(--color-accent);
+  color: var(--c-accent);
+}
+
+/* 详情页正文预览：第三方 HTML 已由 bluemonday 净化，这里只补排版 */
+.article-preview {
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.article-preview > :first-child {
+  margin-top: 0;
+}
+
+.article-preview p,
+.article-preview ul,
+.article-preview ol,
+.article-preview blockquote,
+.article-preview pre,
+.article-preview table,
+.article-preview figure {
+  margin: 0 0 0.75em;
+}
+
+.article-preview h1,
+.article-preview h2,
+.article-preview h3,
+.article-preview h4,
+.article-preview h5,
+.article-preview h6 {
+  margin: 1.1em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.article-preview h1 {
+  font-size: 18px;
+}
+.article-preview h2 {
+  font-size: 16px;
+}
+.article-preview h3 {
+  font-size: 14px;
+}
+
+.article-preview a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.article-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.article-preview blockquote {
+  border-left: 2px solid var(--c-line);
+  padding-left: 10px;
+  color: var(--c-muted);
+}
+
+.article-preview pre {
+  overflow: auto;
+  border-radius: 4px;
+  background: var(--c-panel-2);
+  padding: 8px 10px;
+}
+
+.article-preview code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.article-preview table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.article-preview th,
+.article-preview td {
+  border: 1px solid var(--c-line-soft);
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.article-preview hr {
+  margin: 1em 0;
+  border: 0;
+  border-top: 1px solid var(--c-line-soft);
 }

@@ -1,10 +1,13 @@
 import type {
+  AppSettings,
+  ArticlePreview,
   Candidate,
   Entry,
   RawItem,
   RunOutcome,
   RunRow,
   Source,
+  SourceDefaults,
   SourceView,
   Stats,
   Suggestion,
@@ -70,6 +73,13 @@ export const api = {
   flushNotify: () => req<{ ok: boolean }>('/api/notify/flush', { method: 'POST', body: '{}' }),
   opmlUrl: '/api/export/opml',
 
+  settings: () => req<AppSettings>('/api/settings'),
+  saveSettings: (defaults: SourceDefaults) =>
+    req<{ defaults: SourceDefaults }>('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ defaults }),
+    }),
+
   probeFetch: (body: {
     url: string
     engine: string
@@ -77,10 +87,19 @@ export const api = {
     cookies?: Record<string, string>
     proxy?: string
     wait_ms?: number
+    wait_selector?: string
+    timeout_sec?: number
+    browser_ws?: string
+    charset?: string
   }) =>
     req<{ sid: string; url: string; title: string; bytes: number }>('/api/probe/fetch', {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  probeArticle: (sid: string, article: Source['article']) =>
+    req<ArticlePreview>('/api/probe/article', {
+      method: 'POST',
+      body: JSON.stringify({ sid, article }),
     }),
   probeExtract: (sid: string, extract: Source['extract'], rules: Source['rules']) =>
     req<{ items: RawItem[] | null; matched: number; warnings: string[] | null }>(

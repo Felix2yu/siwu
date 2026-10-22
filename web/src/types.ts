@@ -215,6 +215,40 @@ export interface Stats {
   targets: number
 }
 
+export interface SourceDefaults {
+  interval_sec: number
+  max_items: number
+  retention_days: number
+  update_mode: string
+  article_enabled: boolean
+}
+
+export interface SystemInfo {
+  version: string
+  base_url: string
+  timezone: string
+  workers: number
+  data_dir: string
+  auth_required: boolean
+  feed_token_required: boolean
+  allow_private: boolean
+  browser_ws: string
+  chrome_path: string
+}
+
+export interface AppSettings {
+  defaults: SourceDefaults
+  system: SystemInfo
+}
+
+export interface ArticlePreview {
+  title: string
+  date: string
+  content_html: string
+  content_text: string
+  method: 'selector' | 'readability' | ''
+}
+
 export interface LiveEvent {
   type: string
   at: number
@@ -293,4 +327,15 @@ export function blankSource(): Source {
     next_run_at: 0,
     consecutive_failures: 0,
   }
+}
+
+// 只覆盖「新建源默认值」里暴露的五项，其余保持 blankSource。
+export function applySourceDefaults(src: Source, defaults?: SourceDefaults): Source {
+  if (!defaults) return src
+  src.policy.interval_sec = defaults.interval_sec
+  src.policy.max_items = defaults.max_items
+  src.policy.retention_days = defaults.retention_days
+  src.policy.update_mode = defaults.update_mode
+  src.article.enabled = defaults.article_enabled
+  return src
 }

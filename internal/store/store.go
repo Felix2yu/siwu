@@ -764,3 +764,29 @@ func (s *Store) SetSetting(key, value string) error {
 		key, value)
 	return err
 }
+
+const appSettingsKey = "app_settings"
+
+// GetSettings 读实例设置；从未保存过时返回内置默认值。
+func (s *Store) GetSettings() (model.Settings, error) {
+	out := model.DefaultSettings()
+	raw := s.GetSetting(appSettingsKey, "")
+	if raw == "" {
+		return out, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return model.DefaultSettings(), fmt.Errorf("解析设置: %w", err)
+	}
+	out.Normalize()
+	return out, nil
+}
+
+// SaveSettings 保存实例设置。
+func (s *Store) SaveSettings(v model.Settings) error {
+	v.Normalize()
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return s.SetSetting(appSettingsKey, string(b))
+}

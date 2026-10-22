@@ -118,6 +118,8 @@ func run() error {
 		Scheduler: sched, Deps: deps, Box: box, Log: log, Bus: bus,
 		BaseURL: *baseURL, Password: os.Getenv("SIWU_PASSWORD"),
 		FeedToken: os.Getenv("SIWU_FEED_TOKEN"), Version: version,
+		Workers: *workers, DataDir: *dataDir, AllowPrivate: *insecure,
+		BrowserWS: *browser, ChromePath: *chrome,
 	}
 	if web.HasBuild() {
 		srv.Web = web.FS()

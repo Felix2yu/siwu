@@ -504,6 +504,65 @@ func (s *Server) stats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, st)
 }
 
+// ---------------------------------------------------------------- settings
+
+type systemInfo struct {
+	Version           string `json:"version"`
+	BaseURL           string `json:"base_url"`
+	Timezone          string `json:"timezone"`
+	Workers           int    `json:"workers"`
+	DataDir           string `json:"data_dir"`
+	AuthRequired      bool   `json:"auth_required"`
+	FeedTokenRequired bool   `json:"feed_token_required"`
+	AllowPrivate      bool   `json:"allow_private"`
+	BrowserWS         string `json:"browser_ws"`
+	ChromePath        string `json:"chrome_path"`
+}
+
+func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
+	st, err := s.Store.GetSettings()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"defaults": st.Defaults,
+		"system": systemInfo{
+			Version: s.Version, BaseURL: s.BaseURL, Timezone: localZoneLabel(),
+			Workers: s.Workers, DataDir: s.DataDir,
+			AuthRequired: s.Password != "", FeedTokenRequired: s.FeedToken != "",
+			AllowPrivate: s.AllowPrivate, BrowserWS: s.BrowserWS, ChromePath: s.ChromePath,
+		},
+	})
+}
+
+func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Defaults model.SourceDefaults `json:"defaults"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	v := model.Settings{Defaults: body.Defaults}
+	v.Normalize()
+	if err := s.Store.SaveSettings(v); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"defaults": v.Defaults})
+}
+
+func localZoneLabel() string {
+	name, offset := time.Now().Zone()
+	sign := "+"
+	if offset < 0 {
+		sign = "-"
+		offset = -offset
+	}
+	return fmt.Sprintf("%s (UTC%s%02d:%02d)", name, sign, offset/3600, offset%3600/60)
+}
+
 // sse 推送运行与通知事件。前端用 EventSource 订阅，断线后浏览器会自动重连。
 func (s *Server) sse(w http.ResponseWriter, r *http.Request) {
 	if s.Bus == nil {

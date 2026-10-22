@@ -8,7 +8,14 @@ import EditorPage from './pages/EditorPage'
 import EntriesPage from './pages/EntriesPage'
 import RunsPage from './pages/RunsPage'
 import TargetsPage from './pages/TargetsPage'
+import SettingsPage from './pages/SettingsPage'
+import { applyTheme, loadThemeMode } from './theme'
 import './index.css'
+
+// 跟随系统时，操作系统切换深浅色要立刻反映到页面；手动主题不受影响。
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  applyTheme(loadThemeMode())
+})
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 10_000, retry: 1 } },
@@ -25,6 +32,7 @@ const router = createBrowserRouter([
       { path: 'sources/:id/entries', element: <EntriesPage /> },
       { path: 'runs', element: <RunsPage /> },
       { path: 'targets', element: <TargetsPage /> },
+      { path: 'settings', element: <SettingsPage /> },
     ],
   },
 ])

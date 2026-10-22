@@ -120,7 +120,7 @@ export default function TargetsPage() {
                       >
                         <input
                           type="checkbox"
-                          className="size-3.5 accent-[var(--color-accent)]"
+                          className="size-3.5 accent-[var(--c-accent)]"
                           checked={t.enabled}
                           onChange={(e) =>
                             update.mutate({ id: t.id, name: t.name, enabled: e.target.checked })

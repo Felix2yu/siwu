@@ -44,6 +44,12 @@ type Server struct {
 	FeedToken string
 	Version   string
 
+	Workers      int
+	DataDir      string
+	AllowPrivate bool
+	BrowserWS    string
+	ChromePath   string
+
 	sessionToken string
 	csrf         *http.CrossOriginProtection
 }
@@ -76,6 +82,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/events", s.sse)
 	mux.HandleFunc("GET /api/export/opml", s.exportOPML)
 	mux.HandleFunc("POST /api/notify/flush", s.flushNotify)
+	mux.HandleFunc("GET /api/settings", s.getSettings)
+	mux.HandleFunc("PUT /api/settings", s.putSettings)
 
 	mux.HandleFunc("POST /api/probe/fetch", s.probeFetch)
 	mux.HandleFunc("GET /api/preview/{sid}", s.previewPage)

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, Outlet } from 'react-router'
 import { useEffect, useState } from 'react'
-import { Activity, Bell, ListTree, Radar } from 'lucide-react'
+import { Activity, Bell, ListTree, Radar, Settings } from 'lucide-react'
 import { api } from './api'
 import { Button, Input, cn } from './components/ui'
 import { startLive, useLive } from './live'
@@ -58,6 +58,7 @@ const nav = [
   { to: '/', label: '监控源', icon: Radar, end: true },
   { to: '/runs', label: '运行记录', icon: Activity },
   { to: '/targets', label: '通知通道', icon: Bell },
+  { to: '/settings', label: '设置', icon: Settings },
 ]
 
 export default function App() {

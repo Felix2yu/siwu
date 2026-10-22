@@ -16,7 +16,7 @@ export function Button({
   size?: 'sm' | 'md'
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const base =
-    'inline-flex items-center gap-1.5 rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+    'inline-flex items-center gap-1.5 whitespace-nowrap rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
   const sizes = size === 'sm' ? 'h-7 px-2 text-[12px]' : 'h-8 px-3'
   const variants = {
     default: 'border-line bg-panel-2 text-ink hover:border-muted hover:bg-line-soft',
@@ -158,9 +158,54 @@ export function Checkbox({
 }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="inline-flex cursor-pointer items-center gap-2 text-[12px] text-muted">
-      <input type="checkbox" className="size-3.5 accent-[var(--color-accent)]" {...rest} />
+      <input type="checkbox" className="size-3.5 accent-[var(--c-accent)]" {...rest} />
       {label}
     </label>
+  )
+}
+
+export function Switch({
+  label,
+  checked,
+  onChange,
+  disabled,
+  title,
+}: {
+  label: string
+  checked: boolean
+  onChange: (next: boolean) => void
+  disabled?: boolean
+  title?: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      title={title}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        'inline-flex items-center gap-2 text-[12px] transition-opacity disabled:opacity-40',
+        checked ? 'text-ink' : 'text-muted',
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border transition-colors',
+          checked ? 'border-accent/70 bg-accent/80' : 'border-line bg-panel-2',
+        )}
+      >
+        <span
+          className={cn(
+            'absolute size-3 rounded-full bg-panel shadow-sm transition-all',
+            checked ? 'left-3.5' : 'left-0.5',
+          )}
+        />
+      </span>
+      {label}
+    </button>
   )
 }
 
