@@ -150,6 +150,45 @@ func TestStats(t *testing.T) {
 	}
 }
 
+func TestSettingsAPI(t *testing.T) {
+	srv, _ := testServer(t, "")
+	req := httptest.NewRequest(http.MethodPut, "/api/settings",
+		strings.NewReader(`{"defaults":{"interval_sec":900,"max_items":20,"retention_days":7,"update_mode":"archive","article_enabled":true}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("保存设置应 200，实际 %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := do(t, srv, "/api/settings", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("读取设置应 200，实际 %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	text := string(body)
+	for _, want := range []string{
+		`"interval_sec":900`, `"max_items":20`, `"update_mode":"archive"`,
+		`"article_enabled":true`, `"version":"test"`, `"base_url":"https://siwu.example"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("设置响应缺少 %s: %s", want, text)
+		}
+	}
+
+	// 越界值应在服务端收敛，而不是原样落库
+	req = httptest.NewRequest(http.MethodPut, "/api/settings",
+		strings.NewReader(`{"defaults":{"interval_sec":0,"max_items":0,"update_mode":"nope"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	body, _ = io.ReadAll(rec.Result().Body)
+	if !strings.Contains(string(body), `"interval_sec":3600`) ||
+		!strings.Contains(string(body), `"update_mode":"update"`) {
+		t.Errorf("越界值未收敛: %s", body)
+	}
+}
+
 func TestSSEStreamsEvents(t *testing.T) {
 	srv, st := testServer(t, "")
 	seed(t, st)

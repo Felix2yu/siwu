@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blankSource } from './types'
+import { applySourceDefaults, blankSource } from './types'
 
 describe('blankSource', () => {
   it('默认走 HTTP 通道、列表型，并且是启用的', () => {
@@ -45,5 +45,30 @@ describe('blankSource', () => {
     }
     expect(b.policy.notify.triggers).not.toContain('custom')
     expect(b.extract.fields).toEqual({})
+  })
+})
+
+describe('applySourceDefaults', () => {
+  it('只覆盖设置页暴露的五项', () => {
+    const s = applySourceDefaults(blankSource(), {
+      interval_sec: 600,
+      max_items: 20,
+      retention_days: 7,
+      update_mode: 'archive',
+      article_enabled: true,
+    })
+    expect(s.policy.interval_sec).toBe(600)
+    expect(s.policy.max_items).toBe(20)
+    expect(s.policy.retention_days).toBe(7)
+    expect(s.policy.update_mode).toBe('archive')
+    expect(s.article.enabled).toBe(true)
+    expect(s.request.timeout_sec).toBe(20)
+    expect(s.policy.notify.detail).toBe('summary')
+  })
+
+  it('没有设置时保持 blankSource 原值', () => {
+    const s = applySourceDefaults(blankSource(), undefined)
+    expect(s.policy.interval_sec).toBe(3600)
+    expect(s.article.enabled).toBe(false)
   })
 })

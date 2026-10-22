@@ -74,6 +74,31 @@ func TestUpsertDedupes(t *testing.T) {
 	}
 }
 
+func TestSettingsRoundTrip(t *testing.T) {
+	st := openTest(t)
+	got, err := st.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Defaults.IntervalSec != 3600 || got.Defaults.UpdateMode != "update" {
+		t.Fatalf("未保存时应返回内置默认值: %+v", got.Defaults)
+	}
+	want := model.Settings{Defaults: model.SourceDefaults{
+		IntervalSec: 600, MaxItems: 20, RetentionDays: 7,
+		UpdateMode: "archive", ArticleEnabled: true,
+	}}
+	if err := st.SaveSettings(want); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Defaults != want.Defaults {
+		t.Fatalf("设置未正确往返: got=%+v want=%+v", got.Defaults, want.Defaults)
+	}
+}
+
 func TestSnapshotRoundTrip(t *testing.T) {
 	st := openTest(t)
 	src := model.Source{Name: "p", Kind: model.KindPage, URL: "https://example.com"}
