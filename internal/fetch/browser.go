@@ -68,7 +68,9 @@ func (f *Fetcher) browserPage(ctx context.Context, src model.Source) (Response, 
 	}
 	wait := src.Request.WaitMS
 	if wait <= 0 {
-		wait = 800
+		// H5/SPA 在 load 事件之后才关闭自己的加载 toast，冷启动 2s 仍可能抓到。
+		// 实测这个站点 3s 后 toast 才 display:none；站点更慢时用「渲染后等待」调大。
+		wait = 3000
 	}
 	_ = chromedp.Do(tabCtx, chromedp.Sleep(time.Duration(wait)*time.Millisecond))
 

@@ -552,7 +552,7 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
                 />
               </Field>
               <div className="grid grid-cols-2 gap-2">
-                <Field label="渲染后等待（ms）">
+                <Field label="渲染后等待（ms）" hint="浏览器通道有效；0 用默认 3000ms">
                   <Input
                     type="number"
                     value={draft.request.wait_ms}

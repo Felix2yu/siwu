@@ -19,6 +19,26 @@
 
   function ready() {
     document.documentElement.appendChild(box)
+    // 预览是净化后的静态 DOM，站点原本负责关闭的 loading 遮罩会永久停留。
+    // 只在预览里隐藏常见组件库的遮罩，不影响抽取用的会话 HTML。
+    var style = document.createElement('style')
+    style.textContent = [
+      '.at-activity-indicator',
+      '.at-loading',
+      '.van-loading',
+      '.ant-spin-spinning',
+      '.el-loading-mask',
+      '.weui-loading',
+      '[class*="loading-mask"]'
+    ].join(',') + '{display:none !important}'
+    ;(document.head || document.documentElement).appendChild(style)
+    // Taro 的 loading toast 没有 loading 类名，只在文案上区分
+    var toasts = document.querySelectorAll('.taro__toast')
+    for (var i = 0; i < toasts.length; i++) {
+      if (toasts[i].textContent.indexOf('加载中') !== -1) {
+        toasts[i].style.setProperty('display', 'none', 'important')
+      }
+    }
   }
   if (document.body) ready()
   else document.addEventListener('DOMContentLoaded', ready)
