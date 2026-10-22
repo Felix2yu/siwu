@@ -193,7 +193,29 @@ GET /api/preview/{sid}   ← iframe sandbox="allow-scripts"（不给 allow-same-
 
 交互：悬浮高亮 → 点击选中（`↑/↓` 切父/子）→ 后端产出候选（精确路径 / **重复块泛化** / 同标签兄弟）并各取命中数 → 字段推断（`a[href]`/`time`/`.date`）→ 抽取结果表。
 
-实现时踩到的三个点，都已修在代码里：
+#### 接口型的预览：可点选的 JSON 树
+
+接口响应用 `<pre>` 全文展示时能看不能选。现在响应被渲染成一棵**可点选的 JSON 树**：每行带
+`data-jpath`（`$.data[0].ArtName`），点一行就把路径回传给编辑器；`▸` 折叠、`… 还有 N 条` 展开剩余记录。
+后端按会话形态路由：
+
+| 场景 | 预览内容 | 抽取走哪条 |
+|---|---|---|
+| `kind=json` + `api.url` | 抓 `api.url`（与正式运行同一条通道，含 in_browser 的 WAF 签名） | `extract.JSON` |
+| 响应体是 JSON（不论 kind） | JSON 树 + 提示「改类型为接口型」 | 按会话 `Kind=json` |
+| 普通页面 | 净化后的 HTML + picker | `extract.HTML` |
+
+点字段时后端以「该字段所属的那条记录」为根推断字段（`title=$.ArtName`、`date=$.StartTime`、
+`guid=$.ArtId`），条目候选直接给所属数组（`json:$.data`，含命中数），与 HTML 侧的「以条目节点为根」同理。
+`json:` 前缀只是书写习惯，`extract.JSON` 与保存校验都会剥掉。
+
+![接口型预览：点字段给出条目路径与字段推断](json-picker.png)
+
+**空壳页面**：列表由脚本异步渲染时，HTTP 通道抓到的快照里没有条目，框选无从下手。
+`shellPageHint` 会识别这种情况（脚本里有 `$.get/fetch` 取数调用、页面里却没有 `li/tr/article` 结构），
+并从脚本里把接口地址捞出来直接写进提示：*「把 /Art/GetArtList1 填进 api.url」*。
+
+实现时踩到的点，都已修在代码里：
 
 1. **picker 必须内联注入**，不能用 `<script src="/picker.js">`：预览页里有 `<base href="目标站">`，相对路径会被解析到目标站去。
 2. **字段推断的根必须是「条目节点」**，不是被点中的那个节点。用户点的通常是标题 `<a>`，若以它为根，推断出的 `sel` 是 `.`，一旦把条目换成父级 `li` 就全错。现在 `/api/probe/suggest` 接受 `item` 参数，以条目选择器命中的第一个节点为根重新推断。

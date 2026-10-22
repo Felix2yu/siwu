@@ -273,6 +273,8 @@ func (s *Server) probeFetch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		URL          string            `json:"url"`
 		Engine       string            `json:"engine"`
+		Kind         string            `json:"kind"`
+		API          *model.APISpec    `json:"api"`
 		Headers      map[string]string `json:"headers"`
 		Cookies      map[string]string `json:"cookies"`
 		Proxy        string            `json:"proxy"`
@@ -294,26 +296,35 @@ func (s *Server) probeFetch(w http.ResponseWriter, r *http.Request) {
 	if engine == "" {
 		engine = model.EngineHTTP
 	}
+	kind := model.Kind(body.Kind)
+	if kind == "" {
+		kind = model.KindHTML
+	}
 	req := model.Request{
 		Headers: body.Headers, Cookies: body.Cookies, Proxy: body.Proxy,
 		WaitMS: body.WaitMS, WaitSelector: body.WaitSelector,
 		TimeoutSec: body.TimeoutSec, BrowserWS: body.BrowserWS, Charset: body.Charset,
+		API: body.API,
 	}
 	if req.TimeoutSec <= 0 {
 		req.TimeoutSec = 45
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
-	sess, err := s.Probe.Fetch(ctx, body.URL, engine, req)
+	// 接口型源预览抓 api.url（与正式运行同一条通道），否则抓页面
+	src := model.Source{URL: body.URL, Engine: engine, Kind: kind, Request: req}
+	sess, err := s.Probe.Fetch(ctx, src)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"sid":   sess.ID,
-		"url":   sess.URL,
-		"title": sess.Title,
-		"bytes": len(sess.HTML),
+		"sid":      sess.ID,
+		"url":      sess.URL,
+		"title":    sess.Title,
+		"bytes":    len(sess.HTML),
+		"kind":     sess.Kind,
+		"warnings": sess.Warnings,
 	})
 }
 
@@ -744,7 +755,8 @@ func (s *Server) normalizeAndValidate(src *model.Source) error {
 		if src.Request.API == nil || strings.TrimSpace(src.Request.API.URL) == "" {
 			return fmt.Errorf("接口型必须给出 api.url")
 		}
-		if !strings.HasPrefix(strings.TrimSpace(src.Extract.Item), "$") {
+		// 允许 `json:` 前缀：预览点选给出的候选统一带前缀
+		if !strings.HasPrefix(strings.TrimPrefix(strings.TrimSpace(src.Extract.Item), "json:"), "$") {
 			return fmt.Errorf("接口型的 item 必须是 JSON 路径（以 $ 开头）")
 		}
 		if strings.TrimSpace(src.Request.API.URL) == "" {
@@ -762,7 +774,7 @@ func (s *Server) normalizeAndValidate(src *model.Source) error {
 			continue
 		}
 		if src.Kind == model.KindJSON {
-			if !strings.HasPrefix(f.Sel, "$") && f.Template == "" {
+			if !strings.HasPrefix(strings.TrimPrefix(strings.TrimSpace(f.Sel), "json:"), "$") && f.Template == "" {
 				return fmt.Errorf("字段 %s 的 JSON 路径必须以 $ 开头", name)
 			}
 			continue

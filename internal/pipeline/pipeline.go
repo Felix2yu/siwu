@@ -160,7 +160,8 @@ func (d *Deps) runJSON(ctx context.Context, src model.Source, dryRun bool, out *
 	if err != nil {
 		return err
 	}
-	res, err := extract.JSON(resp.Body, src.Extract, src.Rules)
+	// 接口给的相对详情页路径按源的站点根补全，否则 RSS 里的链接点不开
+	res, err := extract.JSONWithBase(resp.Body, src.URL, src.Extract, src.Rules)
 	if err != nil {
 		return err
 	}

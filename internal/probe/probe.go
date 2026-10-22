@@ -24,7 +24,10 @@ type Session struct {
 	URL       string
 	Title     string
 	HTML      []byte
-	Raw       []byte // 净化前的响应体，供正文抽取复用
+	Raw       []byte   // 净化前的响应体，供正文抽取与 JSON 抽取复用
+	Kind      string   // html | json，决定抽取与建议走哪条路
+	Doc       any      // Kind=json 时解析好的文档
+	Warnings  []string // 预览期的提示（例如页面内容由脚本渲染）
 	FetchedAt time.Time
 }
 
@@ -57,30 +60,57 @@ func (p *Probe) gc() {
 	}
 }
 
-// Fetch 抓取并生成预览会话。
-func (p *Probe) Fetch(ctx context.Context, rawURL string, engine model.Engine, req model.Request) (*Session, error) {
-	src := model.Source{URL: rawURL, Engine: engine, Request: req}
+// Fetch 抓取并生成预览会话。接口型源走 api.url（与正式运行同一条通道），
+// 其余走页面通道——预览必须和真实运行取到同一份数据，否则框选出来的选择器是假的。
+func (p *Probe) Fetch(ctx context.Context, src model.Source) (*Session, error) {
 	src.Defaults()
-	resp, err := p.fetcher.Page(ctx, src)
+	apiMode := src.Kind == model.KindJSON && src.Request.API != nil &&
+		strings.TrimSpace(src.Request.API.URL) != ""
+	var (
+		resp fetch.Response
+		err  error
+	)
+	if apiMode {
+		resp, err = p.fetcher.API(ctx, src)
+	} else {
+		resp, err = p.fetcher.Page(ctx, src)
+	}
 	if err != nil {
 		return nil, err
 	}
+	rawURL := src.URL
+	if apiMode {
+		rawURL = firstNonEmpty(src.Request.API.URL, src.URL)
+	}
 	body := resp.Body
-	if strings.Contains(strings.ToLower(resp.ContentType), "json") {
-		// JSON 直接包进 <pre>，前端仍可看结构，但不能框选
-		body = []byte("<html><head><meta charset=\"utf-8\">" +
-			"<style>body{margin:0;background:#111;color:#ddd;font:12px/1.6 ui-monospace,monospace}" +
-			"pre{padding:16px;white-space:pre-wrap;word-break:break-all}</style></head><body><pre>" +
-			html.EscapeString(string(resp.Body)) + "</pre></body></html>")
+	kind := "html"
+	var doc any
+	var warnings []string
+	if d, ok := parseJSONDocGuess(body, resp.ContentType); ok {
+		// 接口响应渲染成可点选的树，而不是只能看不能选的一坨 <pre>
+		kind, doc = "json", d
+		body = jsonTreeHTML(d, "接口响应：点任意一行选中该路径；点 ▸ 展开，点「… 还有 N 条」展开剩余记录。")
+		if src.Kind != model.KindJSON {
+			// 抓到 JSON 却按列表型跑，正式运行会拿 HTML 解析器去读 JSON，必然 0 条
+			warnings = append(warnings, "这个地址返回的是 JSON：请把类型改成「接口型」，并把该地址填进 api.url，否则正式运行按 HTML 抽取取不到条目。")
+		}
+	} else if !apiMode {
+		if w := shellPageHint(body); w != "" {
+			warnings = append(warnings, w)
+		}
 	}
 	safe, err := sanitize(body, firstNonEmpty(resp.FinalURL, rawURL))
 	if err != nil {
 		return nil, err
 	}
+	title := extract.TitleOf(body)
+	if kind == "json" {
+		title = "JSON 接口 · " + firstNonEmpty(resp.FinalURL, rawURL)
+	}
 	id := randomID()
 	sess := &Session{
-		ID: id, URL: firstNonEmpty(resp.FinalURL, rawURL), Title: extract.TitleOf(body),
-		HTML: safe, Raw: body, FetchedAt: time.Now(),
+		ID: id, URL: firstNonEmpty(resp.FinalURL, rawURL), Title: title,
+		HTML: safe, Raw: resp.Body, Kind: kind, Doc: doc, Warnings: warnings, FetchedAt: time.Now(),
 	}
 	p.mu.Lock()
 	if len(p.sessions) > 24 {
@@ -108,6 +138,9 @@ func (p *Probe) Extract(id string, spec model.Extract, rules []model.Rule) (extr
 	if !ok {
 		return extract.Result{}, fmt.Errorf("预览会话已过期，请重新抓取页面")
 	}
+	if s.Kind == "json" {
+		return extract.JSONWithBase(s.Raw, s.URL, spec, rules)
+	}
 	return extract.HTML(s.HTML, s.URL, spec, rules)
 }
 
@@ -129,6 +162,9 @@ func (p *Probe) Count(id, selector string) (int, []string, error) {
 	s, ok := p.Get(id)
 	if !ok {
 		return 0, nil, fmt.Errorf("预览会话已过期")
+	}
+	if s.Kind == "json" {
+		return jsonCount(s.Doc, selector)
 	}
 	doc, err := html.Parse(bytes.NewReader(s.HTML))
 	if err != nil {
@@ -182,6 +218,9 @@ func (p *Probe) Suggest(id, xpathExpr, itemSelector string) (Suggestion, error) 
 	s, ok := p.Get(id)
 	if !ok {
 		return Suggestion{}, fmt.Errorf("预览会话已过期")
+	}
+	if s.Kind == "json" {
+		return p.jsonSuggest(s, xpathExpr, itemSelector)
 	}
 	doc, err := html.Parse(bytes.NewReader(s.HTML))
 	if err != nil {

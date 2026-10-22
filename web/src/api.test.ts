@@ -54,3 +54,28 @@ describe('api.req', () => {
     expect(calls[0]?.init?.headers).toBeUndefined()
   })
 })
+
+describe('api.probeFetch', () => {
+  it('把 kind 与 api 一起发给后端，并回传预览形态', async () => {
+    const calls = stubFetch(
+      JSON.stringify({
+        sid: 's1',
+        url: 'https://x/api',
+        title: 'JSON 接口',
+        bytes: 10,
+        kind: 'json',
+        warnings: null,
+      }),
+    )
+    const res = await api.probeFetch({
+      url: 'https://x/index',
+      engine: 'http',
+      kind: 'json',
+      api: { url: 'https://x/api', method: 'GET', in_browser: false },
+    })
+    const sent = JSON.parse(String(calls[0]?.init?.body))
+    expect(sent.kind).toBe('json')
+    expect(sent.api.url).toBe('https://x/api')
+    expect(res.kind).toBe('json')
+  })
+})

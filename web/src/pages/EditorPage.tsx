@@ -143,6 +143,9 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
   const [headersText, setHeadersText] = useState(() => mapToLines(initial.request.headers))
   const [sid, setSid] = useState('')
   const [picked, setPicked] = useState('')
+  // 预览形态：接口响应渲染成可点选的 JSON 树，HTML 页面才是框选
+  const [previewKind, setPreviewKind] = useState<'html' | 'json'>('html')
+  const [previewWarn, setPreviewWarn] = useState<string[]>([])
   const [previewMeta, setPreviewMeta] = useState<{ title: string; bytes: number } | null>(null)
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
   const [probeItems, setProbeItems] = useState<RawItem[]>([])
@@ -176,7 +179,7 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
     })
   }
 
-  async function pickElement(xpath: string) {
+  async function pickElement(xpath: string, isJSON = false) {
     if (pickTarget === 'article') {
       if (!detail) return
       try {
@@ -196,7 +199,9 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
       setPicked(xpath)
       const sug = await api.probeSuggest(sid, xpath, draft.extract.item)
       setSuggestion(sug)
-      setMessage(`已选中 <${sug.tag}>，命中候选见右侧`)
+      setMessage(
+        isJSON ? `已选中 ${xpath}，候选与字段推断见下方` : `已选中 <${sug.tag}>，命中候选见右侧`,
+      )
     } catch (err) {
       setMessage(err instanceof Error ? err.message : '解析选中元素失败')
     } finally {
@@ -303,16 +308,21 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
   }
 
   // 拾取器通过 postMessage 回传选中的元素；用 Effect Event 读最新 state 而不重订阅
-  const onPicked = useEffectEvent((xpath: string) => {
-    void pickElement(xpath)
+  const onPicked = useEffectEvent((xpath: string, isJSON: boolean) => {
+    void pickElement(xpath, isJSON)
   })
 
   useEffect(() => {
     function onMessage(e: MessageEvent) {
-      const data = e.data as { source?: string; type?: string; xpath?: string } | null
+      const data = e.data as {
+        source?: string
+        type?: string
+        xpath?: string
+        json?: boolean
+      } | null
       if (!data || data.source !== 'siwu-picker') return
       // 正文预览可能没经过列表预览，不能用 sid 作为拾取器的前置条件
-      if (data.type === 'picked' && data.xpath) onPicked(data.xpath)
+      if (data.type === 'picked' && data.xpath) onPicked(data.xpath, !!data.json)
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
@@ -329,6 +339,8 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
       const res = await api.probeFetch({
         url: draft.url,
         engine: draft.engine,
+        kind: draft.kind,
+        api: draft.request.api,
         headers: linesToMap(headersText),
         cookies: draft.request.cookies,
         proxy: draft.request.proxy,
@@ -339,6 +351,8 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
         charset: draft.request.charset,
       })
       setSid(res.sid)
+      setPreviewKind(res.kind === 'json' ? 'json' : 'html')
+      setPreviewWarn(res.warnings ?? [])
       setPreviewMeta({ title: res.title, bytes: res.bytes })
       setSuggestion(null)
       setProbeItems([])
@@ -346,7 +360,11 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
       setDetail(null)
       setArticleView(null)
       setArticleError('')
-      setMessage('预览已就绪：在右侧页面里点击要监控的条目')
+      setMessage(
+        res.kind === 'json'
+          ? '接口响应已展开：点任意一行选中该路径（点 ▸ 展开层级）'
+          : '预览已就绪：在右侧页面里点击要监控的条目',
+      )
     } catch (err) {
       setMessage(err instanceof Error ? err.message : '抓取失败')
     } finally {
@@ -422,7 +440,13 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
 
   const targetList = targets.data ?? []
   const rows = useMemo(() => (Array.isArray(probeItems) ? probeItems : []), [probeItems])
-  const frameSid = pickTarget === 'article' && detail ? detail.sid : isHTML || isPage ? sid : ''
+  // 接口响应也走 iframe：预览渲染成可点选的 JSON 树
+  const frameSid =
+    pickTarget === 'article' && detail
+      ? detail.sid
+      : isHTML || isPage || previewKind === 'json'
+        ? sid
+        : ''
 
   return (
     <div className="flex h-full flex-col">
@@ -1209,7 +1233,7 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
         {/* 右：预览 / 抽取结果 */}
         <div className="flex min-h-0 flex-col">
           <div className="flex items-center gap-2 border-b border-line-soft px-4 py-2">
-            {pickTarget === 'item' && (isHTML || isPage) ? (
+            {pickTarget === 'item' && (isHTML || isPage || isJSON) ? (
               <>
                 <Button
                   onClick={() => void fetchPreview()}
@@ -1226,7 +1250,11 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
                   variant="ghost"
                   onClick={() => void runProbeExtract()}
                   disabled={!sid || busy === 'extract'}
-                  title="用当前选择器在预览 DOM 上抽取"
+                  title={
+                    previewKind === 'json'
+                      ? '用当前 item 路径在接口响应上抽取'
+                      : '用当前选择器在预览 DOM 上抽取'
+                  }
                 >
                   <Crosshair size={13} /> 按当前选择器抽取
                 </Button>
@@ -1234,33 +1262,41 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
                   variant="ghost"
                   onClick={() => scrollToFirstMatch()}
                   disabled={!sid || !draft.extract.item}
-                  title="把第一条命中滚进视野（移动端页面列表常在首屏之外）"
+                  title={
+                    previewKind === 'json'
+                      ? '滚动到 item 路径所在的行'
+                      : '把第一条命中滚进视野（移动端页面列表常在首屏之外）'
+                  }
                 >
                   <Locate size={13} /> 定位首条
                 </Button>
-                <Select
-                  value={viewWidth}
-                  onChange={(e) => setViewWidth(e.target.value as typeof viewWidth)}
-                  className="w-[86px]"
-                  title="预览宽度：移动端 H5 用「手机」才不会被桌面布局挤走内容"
-                >
-                  <option value="auto">全宽</option>
-                  <option value="390">手机</option>
-                  <option value="768">平板</option>
-                </Select>
-                <Button
-                  variant="ghost"
-                  onClick={() => setExpand((v) => !v)}
-                  title={
-                    expand
-                      ? '收起预览，回到抽取结果'
-                      : '放大预览：移动端页面顶部有吸顶筛选栏，面板太矮会挡住列表'
-                  }
-                  className="shrink-0"
-                >
-                  {expand ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                  {expand ? '收起' : '放大'}
-                </Button>
+                {previewKind === 'json' ? null : (
+                  <Select
+                    value={viewWidth}
+                    onChange={(e) => setViewWidth(e.target.value as typeof viewWidth)}
+                    className="w-[86px]"
+                    title="预览宽度：移动端 H5 用「手机」才不会被桌面布局挤走内容"
+                  >
+                    <option value="auto">全宽</option>
+                    <option value="390">手机</option>
+                    <option value="768">平板</option>
+                  </Select>
+                )}
+                {previewKind === 'json' ? null : (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setExpand((v) => !v)}
+                    title={
+                      expand
+                        ? '收起预览，回到抽取结果'
+                        : '放大预览：移动端页面顶部有吸顶筛选栏，面板太矮会挡住列表'
+                    }
+                    className="shrink-0"
+                  >
+                    {expand ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                    {expand ? '收起' : '放大'}
+                  </Button>
+                )}
               </>
             ) : null}
             {pickTarget === 'article' && detail ? (
@@ -1294,6 +1330,13 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
           </div>
 
           <div className="relative flex min-h-0 flex-1 justify-center overflow-hidden bg-void">
+            {previewWarn.length ? (
+              <div className="absolute inset-x-0 top-0 z-10 border-b border-warn/40 bg-warn/10 px-4 py-1.5 text-[11px] leading-relaxed text-warn">
+                {previewWarn.map((w) => (
+                  <div key={w}>{w}</div>
+                ))}
+              </div>
+            ) : null}
             {frameSid ? (
               <iframe
                 key={frameSid}
@@ -1308,10 +1351,10 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
               <div className="flex h-full items-center justify-center px-6 text-center text-[12px] text-faint">
                 {isHTML || isPage
                   ? '填好地址后点「抓取预览」，在页面里点击要监控的条目（悬停高亮，↑ 选父级，↓ 选子级）'
-                  : draft.article.enabled
-                    ? '在左侧「正文」区填一条详情页地址，点「预览正文」，就能在右侧点选正文容器'
-                    : draft.kind === 'json'
-                      ? '接口型不需要框选：填好 API 与字段后点右上「试跑」看结果'
+                  : draft.kind === 'json'
+                    ? '填好 API 地址后点「抓取预览」，在右侧接口响应里点选字段路径（点 ▸ 展开层级）'
+                    : draft.article.enabled
+                      ? '在左侧「正文」区填一条详情页地址，点「预览正文」，就能在右侧点选正文容器'
                       : '订阅转发不需要框选：填好地址后点右上「试跑」，能解析就行'}
               </div>
             )}

@@ -83,6 +83,15 @@ export const api = {
   probeFetch: (body: {
     url: string
     engine: string
+    kind?: string
+    api?: {
+      url: string
+      method?: string
+      headers?: Record<string, string>
+      body?: string
+      in_browser?: boolean
+      wait_ms?: number
+    }
     headers?: Record<string, string>
     cookies?: Record<string, string>
     proxy?: string
@@ -92,7 +101,14 @@ export const api = {
     browser_ws?: string
     charset?: string
   }) =>
-    req<{ sid: string; url: string; title: string; bytes: number }>('/api/probe/fetch', {
+    req<{
+      sid: string
+      url: string
+      title: string
+      bytes: number
+      kind: string
+      warnings: string[] | null
+    }>('/api/probe/fetch', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

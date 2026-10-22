@@ -211,13 +211,20 @@ func assign(item *RawItem, name, v string) {
 }
 
 // JSON 从 JSON 文档抽取条目（item 为 `$.a.b` 路径，字段支持 `{$.x}` 模板）。
+// item 允许带 `json:` 前缀：预览点选给出的候选统一带前缀，与 HTML 选择器保持一致的书写习惯。
 func JSON(raw []byte, spec model.Extract, rules []model.Rule) (Result, error) {
+	return JSONWithBase(raw, "", spec, rules)
+}
+
+// JSONWithBase 同 JSON，额外给出 baseURL 用于把相对链接补全成绝对地址
+// （接口型源给的详情页路径多半是 /web/Detail?id=1 这种相对形式）。
+func JSONWithBase(raw []byte, baseURL string, spec model.Extract, rules []model.Rule) (Result, error) {
 	var res Result
 	var doc any
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return res, fmt.Errorf("解析 JSON: %w", err)
 	}
-	rows, err := jsonGet(doc, spec.Item)
+	rows, err := jsonGet(doc, strings.TrimPrefix(strings.TrimSpace(spec.Item), "json:"))
 	if err != nil {
 		return res, err
 	}
@@ -254,6 +261,9 @@ func JSON(raw []byte, spec model.Extract, rules []model.Rule) (Result, error) {
 				v = jsonString(jsonGetValue(row, f.Sel))
 			}
 			v = transform.ApplyField(name, v, f.Transforms, rules)
+			if name == "link" && isRelative(v) {
+				v = absolutize(baseURL, v)
+			}
 			values[name] = v
 			assign(&item, name, v)
 		}
@@ -412,6 +422,7 @@ func renderJSONTemplate(tpl string, row any) string {
 }
 
 func jsonGetValue(row any, path string) any {
+	path = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(path), "json:"))
 	if !strings.HasPrefix(path, "$") {
 		return nil
 	}

@@ -51,6 +51,17 @@
 
   var current = null
 
+  // JSON 预览：body[data-mode=json] 时点选的是「路径」而不是 DOM 元素。
+  // 必须每次实时判断——脚本注入在 <head>，初始化时 document.body 还不存在。
+  function jsonMode() {
+    return !!(document.body && document.body.getAttribute('data-mode') === 'json')
+  }
+
+  function jsonRow(el) {
+    if (!el || !el.closest) return null
+    return el.closest('[data-jpath]')
+  }
+
   function draw(el) {
     if (!el || !el.getBoundingClientRect) return
     var r = el.getBoundingClientRect()
@@ -63,6 +74,12 @@
   }
 
   function describe(el) {
+    if (jsonMode()) {
+      var row = jsonRow(el)
+      if (!row) return ''
+      var t = (row.textContent || '').replace(/\s+/g, ' ').trim()
+      return row.getAttribute('data-jpath') + '  ·  ' + t.slice(0, 48)
+    }
     var s = el.tagName.toLowerCase()
     if (el.id) s += '#' + el.id
     if (el.classList && el.classList.length) s += '.' + el.classList[0]
@@ -118,6 +135,22 @@
 
   function payload(el) {
     var text = (el.textContent || '').replace(/\s+/g, ' ').trim()
+    if (jsonMode()) {
+      var row = jsonRow(el)
+      if (!row) return null
+      return {
+        source: 'siwu-picker',
+        type: 'picked',
+        json: true,
+        tag: 'json',
+        xpath: row.getAttribute('data-jpath') || '',
+        css: row.getAttribute('data-jpath') || '',
+        jtype: row.getAttribute('data-jtype') || '',
+        text: text.slice(0, 200),
+        href: '',
+        count: null
+      }
+    }
     return {
       source: 'siwu-picker',
       type: 'picked',
@@ -191,8 +224,10 @@
   }
 
   document.addEventListener('mousemove', function (e) {
-    if (e.target && e.target !== current) {
-      current = e.target
+    if (!e.target) return
+    var next = jsonMode() ? jsonRow(e.target) : e.target
+    if (next && next !== current) {
+      current = next
       draw(current)
     }
   }, true)
@@ -201,11 +236,57 @@
     box.style.display = 'none'
   }, true)
 
+  function toggleFold(row) {
+    var folded = row.classList.toggle('fold')
+    var tw = row.querySelector('.tw')
+    if (tw) tw.textContent = folded ? '▸' : '▾'
+  }
+
+  function markSelected(row) {
+    var prev = document.querySelectorAll('.r.sel')
+    for (var i = 0; i < prev.length; i++) prev[i].classList.remove('sel')
+    if (row) row.classList.add('sel')
+  }
+
+  function jsonQuery(path) {
+    var p = String(path || '').replace(/^json:/, '').replace(/"/g, '\\"')
+    if (!p) return null
+    return document.querySelector('[data-jpath="' + p + '"]')
+  }
+
   document.addEventListener('click', function (e) {
     e.preventDefault()
     e.stopPropagation()
     var el = e.target
     if (!el || el === box) return
+    if (jsonMode()) {
+      var cls = el.classList
+      // 三角：折叠/展开，不产生选中
+      if (cls && cls.contains('tw')) {
+        var head = jsonRow(el)
+        if (head) toggleFold(head)
+        return
+      }
+      // 「… 还有 N 条」：展开剩余记录
+      if (cls && cls.contains('m') && el.getAttribute('data-more')) {
+        var rest = el.nextElementSibling
+        if (rest) {
+          rest.classList.remove('rest')
+          el.style.display = 'none'
+        }
+        return
+      }
+      var row = jsonRow(el)
+      if (!row) return
+      markSelected(row)
+      current = row
+      draw(row)
+      // 点中的是容器就顺手展开，省一次点击
+      if (row.classList.contains('kid') && row.classList.contains('fold')) toggleFold(row)
+      var msg = payload(el)
+      if (msg) post(msg)
+      return
+    }
     draw(el)
     post(payload(el))
   }, true)
@@ -216,7 +297,7 @@
       post({ source: 'siwu-picker', type: 'cleared' })
       return
     }
-    if (!current) return
+    if (jsonMode() || !current) return
     if (e.key === 'ArrowUp' && current.parentElement) {
       e.preventDefault()
       current = current.parentElement
@@ -235,6 +316,18 @@
   window.addEventListener('message', function (e) {
     var d = e.data
     if (!d || d.source !== 'siwu-host') return
+    // JSON 树按路径定位（父页面给的可能是候选里的 json: 路径）
+    if (jsonMode() && (d.type === 'highlight' || d.type === 'scrollTo')) {
+      var node = jsonQuery(d.xpath || d.sel)
+      if (node) {
+        if (node.classList.contains('fold')) toggleFold(node)
+        markSelected(node)
+        current = node
+        try { node.scrollIntoView({ block: 'center', inline: 'nearest' }) } catch (err) { /* 忽略 */ }
+        draw(node)
+      }
+      return
+    }
     if (d.type === 'highlight' && d.xpath) {
       try {
         var r = document.evaluate(d.xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null)
