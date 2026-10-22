@@ -71,6 +71,30 @@ docker compose up -d
 | POST | `/api/probe/fetch`、`/api/probe/suggest`、`/api/probe/extract` | 框选：抓预览、推断选择器、试抽取 |
 | POST | `/api/probe/article` | 在详情页预览会话上抽取正文，返回 `method`（selector / readability） |
 
+### 移动端 H5（Taro / 小程序转 H5）怎么配
+
+这类站点有三个坑，都实测过（以苏州文体通 `szwtfz.maitix.com/h5/` 为例）：
+
+1. **列表在首屏之外**：顶部搜索 + 筛选区高 250px 且 `position: sticky; z-index: 999`，
+   按桌面宽度渲染时卡片被推到 683px 处，预览面板只有 400 多像素，看起来就是「页面是空的」。
+   预览宽度切「手机」，再点「放大」，卡片才进视野。
+2. **抽到了也看不见**：抽取后会自动定位到第一条（也可手动点「定位首条」）。滚的是页面内层
+   的 `overflow: scroll` 容器（`scrollIntoView` 对 Taro 的 ScrollView 不生效），并且会做命中
+   测试避开吸顶栏，否则把卡片滚到顶部仍会被遮住。
+3. **卡片不是 `<a>`**：链接要自己拼。取卡片 `id` 里的 token 再套模板：
+
+   | 字段 | 配置 |
+   |---|---|
+   | `guid` | `sel: xpath:.`、`attr: id`、`transforms: [pid]` |
+   | 规则 `pid` | `strip_prefix`，`value: filter-` |
+   | `link` | 模板 `https://<site>/h5/#/pages-order/projectDetail/index?projectId={guid}` |
+
+   模板字段在所有取值字段之后渲染，`link` 引用排在它后面的 `guid` 也能取到值。
+
+**这类站点别用接口型**：它的 `client.maitix.com/api/pro/projects` 需要页面运行时算出的
+`bx-ua` / `bx-umidtoken` / `hecate` 等反爬头，直接请求只返回 1 条（实际 10 条），
+看似「跑通了」其实数据是残缺的。渲染页面再抽 DOM 才是完整数据。
+
 ## 部署
 
 ```yaml

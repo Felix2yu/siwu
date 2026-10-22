@@ -128,27 +128,32 @@ func extractNode(node *html.Node, baseURL string, spec model.Extract, rules []mo
 		warns  []string
 		values = map[string]string{}
 	)
-	for _, name := range fieldOrder {
-		f, ok := spec.Fields[name]
-		if !ok {
-			continue
-		}
-		if f.Template != "" {
-			v := renderTemplate(f.Template, values)
+	// 两遍处理：先算取值字段，再渲染模板字段。
+	// 模板可以引用任意字段（典型：link 用 {guid}），而 fieldOrder 里 link 排在 guid 之前；
+	// 单遍处理会让占位符先渲染成空串，链接被悄悄截成 "...?projectId=" —— 不报错、看不出。
+	for pass := 0; pass < 2; pass++ {
+		for _, name := range fieldOrder {
+			f, ok := spec.Fields[name]
+			if !ok {
+				continue
+			}
+			templated := f.Template != ""
+			if (pass == 1) != templated {
+				continue
+			}
+			v := ""
+			switch {
+			case templated:
+				v = renderTemplate(f.Template, values)
+			case f.Sel != "":
+				v = valueFromSelectors(node, f, baseURL)
+			}
 			v = transform.ApplyField(name, v, f.Transforms, rules)
 			values[name] = v
 			assign(&item, name, v)
-			continue
-		}
-		v := ""
-		if f.Sel != "" {
-			v = valueFromSelectors(node, f, baseURL)
-		}
-		v = transform.ApplyField(name, v, f.Transforms, rules)
-		values[name] = v
-		assign(&item, name, v)
-		if v == "" && !f.Optional && (name == "title" || name == "link") {
-			warns = append(warns, fmt.Sprintf("条目缺少 %s", name))
+			if !templated && v == "" && !f.Optional && (name == "title" || name == "link") {
+				warns = append(warns, fmt.Sprintf("条目缺少 %s", name))
+			}
 		}
 	}
 	if item.Link != "" && baseURL != "" {

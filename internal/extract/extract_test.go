@@ -109,3 +109,34 @@ func TestSnapshotIgnoresNoise(t *testing.T) {
 		t.Errorf("不该有警告: %v", warns)
 	}
 }
+
+// 模板字段必须最后渲染：link 在 fieldOrder 里排在 guid 之前，
+// 但它的模板引用 {guid}。单遍处理会渲染成空串，链接被静默截断。
+func TestHTMLLinkTemplateUsesLaterField(t *testing.T) {
+	const doc = `<html><body><div class="list-card-item" id="filter-234972004">
+<div class="title">演出 A</div><div class="time">2026.09.13-12.31</div></div></body></html>`
+	spec := model.Extract{
+		Item: "css:.list-card-item",
+		Fields: map[string]model.Field{
+			"title": {Sel: "css:.title"},
+			"guid":  {Sel: "xpath:.", Attr: "id", Transforms: []string{"pid"}},
+			"link":  {Template: "https://szwtfz.maitix.com/h5/#/detail?projectId={guid}"},
+			"date":  {Sel: "css:.time"},
+		},
+	}
+	rules := []model.Rule{{ID: "pid", Op: "strip_prefix", Value: "filter-"}}
+	res, err := HTML([]byte(doc), "https://szwtfz.maitix.com/h5/", spec, rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Matched != 1 {
+		t.Fatalf("应命中 1 条，实际 %d", res.Matched)
+	}
+	got := res.Items[0]
+	if got.Link != "https://szwtfz.maitix.com/h5/#/detail?projectId=234972004" {
+		t.Fatalf("链接模板未取到 guid：%q", got.Link)
+	}
+	if got.GUID != "234972004" {
+		t.Fatalf("guid 应为去掉前缀的 id，实际 %q", got.GUID)
+	}
+}

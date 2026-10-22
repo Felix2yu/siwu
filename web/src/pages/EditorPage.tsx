@@ -1,7 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { ArrowLeft, Crosshair, Loader2, Play, RefreshCw, Save, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  Crosshair,
+  Loader2,
+  Locate,
+  Maximize2,
+  Minimize2,
+  Play,
+  RefreshCw,
+  Save,
+  Trash2,
+} from 'lucide-react'
 import { api } from '../api'
 import { PageHead } from '../App'
 import {
@@ -139,6 +150,9 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState('')
   const [pickTarget, setPickTarget] = useState<'item' | 'article'>('item')
+  // 预览宽度：移动端 H5 按桌面宽度渲染会把列表挤出首屏，必须能切到手机宽度
+  const [viewWidth, setViewWidth] = useState<'auto' | '390' | '768'>('auto')
+  const [expand, setExpand] = useState(false)
   const [detail, setDetail] = useState<{ sid: string; url: string; title: string } | null>(null)
   const [articleLink, setArticleLink] = useState('')
   const [articlePicked, setArticlePicked] = useState('')
@@ -350,11 +364,22 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
       rememberArticleLink(items)
       setProbeWarn(res.warnings ?? [])
       setMessage(`抽取命中 ${res.matched} 个节点，产出 ${res.items?.length ?? 0} 条`)
+      // 只要命中了节点就滚过去：定位看的是 DOM，跟字段填没填全无关
+      if (res.matched > 0) scrollToFirstMatch(nextExtract.item)
     } catch (err) {
       setMessage(err instanceof Error ? err.message : '抽取失败')
     } finally {
       setBusy('')
     }
+  }
+
+  // 让预览 iframe 把第一条命中滚进视野：抽到不等于看得见
+  function scrollToFirstMatch(sel = draft.extract.item) {
+    if (!sel) return
+    frameRef.current?.contentWindow?.postMessage(
+      { source: 'siwu-host', type: 'scrollTo', sel },
+      '*',
+    )
   }
 
   function applyCandidate(c: Candidate) {
@@ -1205,6 +1230,37 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
                 >
                   <Crosshair size={13} /> 按当前选择器抽取
                 </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => scrollToFirstMatch()}
+                  disabled={!sid || !draft.extract.item}
+                  title="把第一条命中滚进视野（移动端页面列表常在首屏之外）"
+                >
+                  <Locate size={13} /> 定位首条
+                </Button>
+                <Select
+                  value={viewWidth}
+                  onChange={(e) => setViewWidth(e.target.value as typeof viewWidth)}
+                  className="w-[86px]"
+                  title="预览宽度：移动端 H5 用「手机」才不会被桌面布局挤走内容"
+                >
+                  <option value="auto">全宽</option>
+                  <option value="390">手机</option>
+                  <option value="768">平板</option>
+                </Select>
+                <Button
+                  variant="ghost"
+                  onClick={() => setExpand((v) => !v)}
+                  title={
+                    expand
+                      ? '收起预览，回到抽取结果'
+                      : '放大预览：移动端页面顶部有吸顶筛选栏，面板太矮会挡住列表'
+                  }
+                  className="shrink-0"
+                >
+                  {expand ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                  {expand ? '收起' : '放大'}
+                </Button>
               </>
             ) : null}
             {pickTarget === 'article' && detail ? (
@@ -1237,7 +1293,7 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
             </span>
           </div>
 
-          <div className="relative min-h-0 flex-1">
+          <div className="relative flex min-h-0 flex-1 justify-center overflow-hidden bg-void">
             {frameSid ? (
               <iframe
                 key={frameSid}
@@ -1245,7 +1301,8 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
                 title="preview"
                 src={`/api/preview/${frameSid}`}
                 sandbox="allow-scripts"
-                className="absolute inset-0 h-full w-full border-0 bg-white"
+                className="h-full border-0 bg-white"
+                style={{ width: viewWidth === 'auto' ? '100%' : `${viewWidth}px` }}
               />
             ) : (
               <div className="flex h-full items-center justify-center px-6 text-center text-[12px] text-faint">
@@ -1260,7 +1317,12 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
             )}
           </div>
 
-          <div className="flex h-[40%] min-h-[200px] shrink-0 flex-col overflow-auto border-t border-line-soft">
+          <div
+            className={cn(
+              'flex min-h-[200px] shrink-0 flex-col overflow-auto border-t border-line-soft',
+              expand ? 'hidden' : 'h-[40%]',
+            )}
+          >
             {pickTarget === 'article' ? (
               <ArticlePreviewPane
                 view={articleView}
