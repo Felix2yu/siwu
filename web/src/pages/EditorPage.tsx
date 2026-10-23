@@ -1416,17 +1416,27 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
                   </div>
                 ) : null}
 
-                <div className="flex items-center justify-between px-4 py-1.5">
-                  <p className="text-[11px] uppercase tracking-wide text-muted">
+                <div className="flex items-center justify-between gap-2 px-4 py-1.5">
+                  <p className="shrink-0 text-[11px] uppercase tracking-wide text-muted">
                     抽取结果 <span className="font-mono text-faint">{rows.length}</span>
                   </p>
-                  <div className="flex gap-1">
-                    {probeWarn.map((w) => (
-                      <Badge key={w} tone="warn">
-                        {w}
-                      </Badge>
-                    ))}
-                  </div>
+                  {probeWarn.length ? (
+                    <div
+                      className="flex min-w-0 flex-wrap items-center justify-end gap-1"
+                      title={probeWarn.join('\n')}
+                    >
+                      {probeWarn.slice(0, 6).map((w) => (
+                        <Badge key={w} tone="warn">
+                          {w}
+                        </Badge>
+                      ))}
+                      {probeWarn.length > 6 ? (
+                        <span className="shrink-0 text-[11px] text-faint">
+                          +{probeWarn.length - 6}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
                 {rows.length === 0 ? (
                   <p className="px-4 pb-4 text-[12px] text-faint">

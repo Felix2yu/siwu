@@ -143,7 +143,8 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] leading-none',
+        // 徽标不换行也不压缩：告警一多时 flex 会把每个徽标挤成一条竖排长缝
+        'inline-flex shrink-0 items-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] leading-none',
         tones,
       )}
     >

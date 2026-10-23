@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
+
+	"github.com/Felix2yu/siwu/internal/model"
 )
 
 // 预览是去掉脚本后的静态 DOM，站点自己的 loading 层不会关闭；拾取器必须兜底隐藏。
@@ -32,7 +34,12 @@ const idAncestorPage = `<html><head><title>美育实践</title></head><body>
     <div class="leftArea area_item">
       <a href="/web/ArtDetail?ArtId=1326"><div class="list_item">
         <div class="list_top"><img src="/x.png"><div class="rtIcon rtIcon_success">报名中</div></div>
-        <div class="list_bottom"><h3>扬剧《百岁挂帅》</h3><p><span>主办单位：</span><span>苏州大学</span></p></div>
+        <div class="list_bottom"><h3>扬剧《百岁挂帅》</h3>
+          <p><span>主办单位：</span><span>艺术教育中心</span></p>
+          <p><span>活动时间：</span><span>10-18 18:30—10-18 21:00</span></p>
+          <p><span>报名时间：</span><span>10-09 09:32—10-18 18:30</span></p>
+          <p><span>活动地点：</span><span>苏州大学天赐庄校区存菊堂</span></p>
+        </div>
       </div></a>
       <a href="/web/ArtDetail?ArtId=1325"><div class="list_item">
         <div class="list_bottom"><h3>读写之美</h3></div>
@@ -194,5 +201,80 @@ func TestPickerXPathIDBranch(t *testing.T) {
 	}
 	if strings.Contains(js, "parts.unshift(\"*[@id='\" + cur.id + \"']\")") {
 		t.Error("picker.js 还在把 id 步骤与节点自身片段叠在一起（会多指一层）")
+	}
+}
+
+// 框选标题 + 点「重复块」之后必须真能抽出来：字段推断给的 sel 要能解析
+// （条目根就是 <a> 时 link/title 的 sel 是 "."），抽取结果不能是 0 条。
+func TestInferredFieldsExtractItems(t *testing.T) {
+	p, sid, doc := htmlSession(t, idAncestorPage, "https://suda.meiyuedu.cn/web/ArtIndex")
+	itemSel := "//*[@id='infoArea']/div[contains(@class,'leftArea')]//a"
+	sug, err := p.Suggest(sid, pickerXPathOf(firstOfTag(t, doc, "h3")), itemSel)
+	if err != nil {
+		t.Fatalf("Suggest 失败: %v", err)
+	}
+
+	fields := map[string]model.Field{}
+	texts := map[string]string{}
+	for _, g := range sug.Fields {
+		fields[g.Name] = model.Field{Sel: g.Sel, Attr: g.Attr}
+		texts[g.Name] = g.Text
+		t.Logf("字段 %s: sel=%s attr=%s text=%s", g.Name, g.Sel, g.Attr, g.Text)
+	}
+	// 标题要取 <h3>，不能把整张卡片的文字（主办单位／活动时间…）当标题
+	if f := fields["title"]; !strings.Contains(f.Sel, "h3") {
+		t.Errorf("title 没认出标题元素: %+v", f)
+	}
+	// 日期不能落在「主办单位：」这种标签行上
+	if texts["date"] == "" || !strings.Contains(texts["date"], "-") {
+		t.Errorf("date 推断不对: sel=%q text=%q", fields["date"].Sel, texts["date"])
+	}
+
+	res, err := p.Extract(sid, model.Extract{Item: itemSel, Fields: fields}, nil)
+	if err != nil {
+		t.Fatalf("抽取失败: %v", err)
+	}
+	if res.Matched != 2 {
+		t.Fatalf("命中 %d 个条目，期望 2", res.Matched)
+	}
+	if len(res.Items) != 2 {
+		t.Fatalf("产出 %d 条（警告 %v），期望 2 条", len(res.Items), res.Warnings)
+	}
+	if got := res.Items[0].Title; got != "扬剧《百岁挂帅》" {
+		t.Errorf("标题 = %q", got)
+	}
+	if got := res.Items[0].Link; got != "https://suda.meiyuedu.cn/web/ArtDetail?ArtId=1326" {
+		t.Errorf("链接 = %q", got)
+	}
+}
+
+// 66 个条目各缺一个字段，警告会堆成上百行；必须按文本聚合，否则界面被挤成一条长缝。
+func TestWarningsAreAggregated(t *testing.T) {
+	page := `<html><body><div class="list">` +
+		strings.Repeat(`<div class="row"><span>x</span></div>`, 66) +
+		`</div></body></html>`
+	p, sid, _ := htmlSession(t, page, "https://example.com/")
+	res, err := p.Extract(sid, model.Extract{
+		Item:   "css:.list > .row",
+		Limit:  200,
+		Fields: map[string]model.Field{"title": {Sel: "css:h2"}, "link": {Sel: "css:a", Attr: "href"}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("抽取失败: %v", err)
+	}
+	if len(res.Items) != 0 {
+		t.Fatalf("取不到标题和链接时不该产出条目，实际 %d", len(res.Items))
+	}
+	if len(res.Warnings) > 4 {
+		t.Fatalf("警告没有聚合，%d 条：%v", len(res.Warnings), res.Warnings)
+	}
+	var joined string
+	for _, w := range res.Warnings {
+		joined += w + "\n"
+	}
+	for _, want := range []string{"条目缺少 title（66 条）", "命中 66 个节点"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("警告里缺少 %q，实际：\n%s", want, joined)
+		}
 	}
 }

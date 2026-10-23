@@ -34,8 +34,10 @@ func Parse(raw string) (Selector, error) {
 		sel.Engine, s = "json", strings.TrimPrefix(s, "json:")
 	case strings.HasPrefix(s, "const:"):
 		sel.Engine, s = "const", strings.TrimPrefix(s, "const:")
-	case strings.HasPrefix(s, "/"), strings.HasPrefix(s, "./"), strings.HasPrefix(s, "("):
-		// 框选器给出的是裸 XPath，按 XPath 解释而不是 CSS
+	case strings.HasPrefix(s, "/"), strings.HasPrefix(s, "./"), s == ".", strings.HasPrefix(s, "("):
+		// 框选器给出的是裸 XPath，按 XPath 解释而不是 CSS。
+		// 单独的 "." 只能是 XPath 的「自身」——CSS 里 "." 是类选择器前缀，后面缺标识符，
+		// 本来就是语法错误，不存在歧义。字段推断给条目根取标题/链接时就会用到它。
 		sel.Engine = "xpath"
 	}
 	if sel.Engine == "css" && !strings.HasPrefix(s, "$") {

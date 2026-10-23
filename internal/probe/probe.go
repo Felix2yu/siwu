@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -309,29 +310,20 @@ func inferFields(node *html.Node) []FieldGuess {
 		}
 		out = append(out, FieldGuess{Name: name, Sel: sel, Attr: attr, Text: truncate(text, 60)})
 	}
+	// 标题先认 h1–h6：条目根常常就是 <a> 或 <li>，一上来拿链接自己的文本当标题，
+	// 会把整张卡片的字（主办单位、活动时间、活动地点…）全吞进去。
+	if h := find(node, isHeading); h != nil {
+		add("title", relXPath(h, node), "", extract.NodeValue(h, ""))
+	}
 	link := find(node, func(n *html.Node) bool {
 		return n.Type == html.ElementNode && n.Data == "a" && extract.NodeValue(n, "href") != ""
 	})
 	if link != nil {
+		// 条目根本身就是链接时 sel 是 "."（自身），extract.Parse 认这个写法
 		add("link", relXPath(link, node), "href", extract.NodeValue(link, ""))
-		add("title", relXPath(link, node), "", extract.NodeValue(link, ""))
+		add("title", relXPath(link, node), "", extract.NodeValue(link, "")) // 没有标题元素时兜底
 	}
-	if h := find(node, func(n *html.Node) bool {
-		return n.Type == html.ElementNode && len(n.Data) == 2 && n.Data[0] == 'h' && n.Data[1] >= '1' && n.Data[1] <= '6'
-	}); h != nil {
-		add("title", relXPath(h, node), "", extract.NodeValue(h, ""))
-	}
-	date := find(node, func(n *html.Node) bool {
-		if n.Type != html.ElementNode {
-			return false
-		}
-		if n.Data == "time" {
-			return true
-		}
-		attrs := strings.ToLower(extract.NodeValue(n, "class"))
-		return strings.Contains(attrs, "date") || strings.Contains(attrs, "time") || n.Data == "span"
-	})
-	if date != nil {
+	if date := find(node, isDate); date != nil {
 		attr := ""
 		if date.Data == "time" && extract.NodeValue(date, "datetime") != "" {
 			attr = "datetime"
@@ -349,6 +341,41 @@ func inferFields(node *html.Node) []FieldGuess {
 		add("summary", relXPath(sum, node), "", extract.NodeValue(sum, ""))
 	}
 	return out
+}
+
+func isHeading(n *html.Node) bool {
+	return n.Type == html.ElementNode && len(n.Data) == 2 && n.Data[0] == 'h' && n.Data[1] >= '1' && n.Data[1] <= '6'
+}
+
+// dateish 只用来判「这段文字像不像日期」，不追求完整日期解析。
+var dateish = regexp.MustCompile(`\d{1,4}\s*[-/年.]\s*\d{1,2}`)
+
+// isDate 判断节点是否是日期。早先的实现只要标签是 <span> 就算日期，
+// 于是「主办单位：」这种标签行也会被当成日期字段——判据必须来自类名或文本本身。
+func isDate(n *html.Node) bool {
+	if n.Type != html.ElementNode {
+		return false
+	}
+	if n.Data == "time" {
+		return true
+	}
+	cls := strings.ToLower(extract.NodeValue(n, "class"))
+	if strings.Contains(cls, "date") || strings.Contains(cls, "time") {
+		return true
+	}
+	// 日期落在文本节点上，带子元素的容器不算，否则整块卡片都可能被认成日期
+	hasChildElement := false
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			hasChildElement = true
+			break
+		}
+	}
+	if hasChildElement {
+		return false
+	}
+	txt := extract.NodeValue(n, "")
+	return len([]rune(txt)) <= 40 && dateish.MatchString(txt)
 }
 
 func find(root *html.Node, pred func(*html.Node) bool) *html.Node {

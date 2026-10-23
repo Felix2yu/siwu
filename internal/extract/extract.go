@@ -50,6 +50,7 @@ func HTML(raw []byte, baseURL string, spec model.Extract, rules []model.Rule) (R
 // FromDoc 在已解析的文档上抽取（预览通道复用同一份 DOM）。
 func FromDoc(doc *html.Node, baseURL string, spec model.Extract, rules []model.Rule) (Result, error) {
 	res := Result{}
+	var warns warnLog
 	itemSel, err := Parse(spec.Item)
 	if err != nil {
 		return res, fmt.Errorf("条目选择器: %w", err)
@@ -72,7 +73,7 @@ func FromDoc(doc *html.Node, baseURL string, spec model.Extract, rules []model.R
 	for _, raw := range spec.Exclude {
 		sel, err := Parse(raw)
 		if err != nil {
-			res.Warnings = append(res.Warnings, fmt.Sprintf("排除选择器非法 %q", raw))
+			warns.add(fmt.Sprintf("排除选择器非法 %q", raw))
 			continue
 		}
 		hits, err := Select(doc, sel)
@@ -90,8 +91,10 @@ func FromDoc(doc *html.Node, baseURL string, spec model.Extract, rules []model.R
 		if len(skip) > 0 && nodeExcluded(node, skip) {
 			continue
 		}
-		item, warns := extractNode(node, baseURL, spec, rules)
-		res.Warnings = append(res.Warnings, warns...)
+		item, itemWarns := extractNode(node, baseURL, spec, rules)
+		for _, w := range itemWarns {
+			warns.add(w)
+		}
 		if item.Link != "" && isRelative(item.Link) {
 			relLinks++
 		}
@@ -101,12 +104,50 @@ func FromDoc(doc *html.Node, baseURL string, spec model.Extract, rules []model.R
 		res.Items = append(res.Items, item)
 	}
 	if relLinks > 0 {
-		res.Warnings = append(res.Warnings, fmt.Sprintf("%d 条链接是相对地址，已按页面地址补全", relLinks))
+		warns.add(fmt.Sprintf("%d 条链接是相对地址，已按页面地址补全", relLinks))
 	}
 	if len(res.Items) == 0 {
-		res.Warnings = append(res.Warnings, "条目选择器没有命中任何节点，或命中的节点缺少标题与链接")
+		// 命中数与产出数分开说：这两件事的修法完全不同（改条目选择器 vs 改字段选择器）
+		if res.Matched == 0 {
+			warns.add("条目选择器没有命中任何节点")
+		} else {
+			warns.add(fmt.Sprintf("命中 %d 个节点，但一条都没取到标题和链接", res.Matched))
+		}
 	}
+	res.Warnings = warns.list()
 	return res, nil
+}
+
+// warnLog 汇总警告。整页扫下来同一句话可能出现上百次（每个条目都缺同一个字段），
+// 逐条抛给界面会把告警区挤成一条长缝，所以按文本聚合，出现多次的带上条数。
+type warnLog struct {
+	order []string
+	count map[string]int
+}
+
+func (w *warnLog) add(text string) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	if w.count == nil {
+		w.count = map[string]int{}
+	}
+	if _, ok := w.count[text]; !ok {
+		w.order = append(w.order, text)
+	}
+	w.count[text]++
+}
+
+func (w *warnLog) list() []string {
+	out := make([]string, 0, len(w.order))
+	for _, text := range w.order {
+		if n := w.count[text]; n > 1 {
+			out = append(out, fmt.Sprintf("%s（%d 条）", text, n))
+			continue
+		}
+		out = append(out, text)
+	}
+	return out
 }
 
 // nodeExcluded 判断节点自身或其后代是否落在排除集合里。

@@ -140,3 +140,32 @@ func TestHTMLLinkTemplateUsesLaterField(t *testing.T) {
 		t.Fatalf("guid 应为去掉前缀的 id，实际 %q", got.GUID)
 	}
 }
+
+// 字段推断给条目根取链接/标题时会写 sel="."，这个写法必须按 XPath 的「自身」解释。
+// 早先它落到 CSS 引擎，cascadia 报 `CSS 选择器非法 "."`，整条抽取直接 0 条。
+func TestDotSelectorMeansSelf(t *testing.T) {
+	sel, err := Parse(".")
+	if err != nil {
+		t.Fatalf(`Parse(".") 失败: %v`, err)
+	}
+	if sel.Engine != "xpath" {
+		t.Fatalf(`"." 应走 xpath，实际 %q`, sel.Engine)
+	}
+	spec := model.Extract{
+		Item: "xpath://ul/li/a", // 条目根就是链接本身：字段只能写 "."（自身）
+		Fields: map[string]model.Field{
+			"title": {Sel: "."},
+			"link":  {Sel: ".", Attr: "href"},
+		},
+	}
+	res, err := HTML([]byte(listHTML), "https://example.com/news.aspx", spec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Items) != 2 {
+		t.Fatalf("应产出 2 条，实际 %d（警告 %v）", len(res.Items), res.Warnings)
+	}
+	if got := res.Items[1].Link; got != "https://example.com/news-detail.aspx?id=2" {
+		t.Fatalf("sel=. 取 href 失败：%q", got)
+	}
+}
