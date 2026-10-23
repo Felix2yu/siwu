@@ -90,12 +90,24 @@
     return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
   }
 
+  // 与后端 probe.absXPath 保持同一套规则，否则浏览器算出的路径在 Go 里重放会落空：
+  // ① 遇到带 id 的节点就用 //*[@id=…] 收尾——绝对路径必须用 // 开头（/… 只会去匹配 <html>），
+  //    且 id 这一步要「取代」该节点自身的片段，不能两个都留（多留一跳就会指到它的子节点上）。
+  // ② id 里可能有单引号，按后端 quoteXPath 的规则选引号。
+  function q(v) {
+    return String(v).indexOf("'") === -1 ? "'" + v + "'" : '"' + v + '"'
+  }
+
   function xpathOf(el) {
     if (!el || el.nodeType !== 1) return ''
-    if (el.id) return "//*[@id='" + el.id + "']"
+    if (el.id) return '//*[@id=' + q(el.id) + ']'
     var parts = []
     var cur = el
     while (cur && cur.nodeType === 1) {
+      if (cur.id) {
+        parts.unshift('*[@id=' + q(cur.id) + ']')
+        return '//' + parts.join('/')
+      }
       var i = 1
       var sib = cur.previousElementSibling
       while (sib) {
@@ -104,13 +116,9 @@
       }
       var cls = cur.classList && cur.classList.length ? cur.classList[0] : ''
       var seg = cur.tagName.toLowerCase()
-      if (cls) seg += "[contains(@class,'" + cls + "')]"
+      if (cls) seg += '[contains(@class,' + q(cls) + ')]'
       else seg += '[' + i + ']'
       parts.unshift(seg)
-      if (cur.id) {
-        parts.unshift("*[@id='" + cur.id + "']")
-        break
-      }
       cur = cur.parentElement
     }
     var p = parts.join('/')
