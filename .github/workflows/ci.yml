@@ -32,6 +32,9 @@ jobs:
       test-packages: ./internal/...
       test-flags: -race -covermode=atomic
       web-dir: web
+      # lint 纳入 CI：本仓 `pnpm run lint` 已本地实测绿（prettier --check + eslint）。
+      # 只有构建侧被验证过是不够的 —— typescript-eslint 对 TS 7 是加载期硬失败。
+      web-lint-command: pnpm run lint
       web-build-command: pnpm run check && pnpm run build
       web-test-command: pnpm run test:coverage
       frontend-coverage-file: web/coverage/lcov.info
