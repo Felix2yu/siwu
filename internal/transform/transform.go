@@ -182,6 +182,47 @@ func NormalizeDate(raw string, layouts []string, loc *time.Location) string {
 	return s
 }
 
+// dateLayouts 是「发布时间」能接受的形状，一律要求带年份：
+// 没有年份的日期在 RSS/Atom 里是残缺的（跨年算错、排序也乱）。
+var dateLayouts = []string{
+	time.RFC3339,
+	"2006-01-02 15:04:05", "2006-01-02 15:04", "2006-01-02",
+	"2006/01/02 15:04", "2006/01/02", "2006.01.02",
+	"2006年1月2日", "2006年01月02日", "2006年1月2日 15:04",
+	"2006-1-2", "2006/1/2",
+}
+
+// rangeMarks 表示这是一段区间。演出/活动的「起止时间」不是条目的发布时间，
+// 更塞不进 RSS 的 pubDate——一整段不是一个时间点。
+var rangeMarks = []string{"—", "–", "~", " 至 ", " 到 ", " 至", " 到", " 起"}
+
+// LooksLikeDate 判断一段文本是不是一个确定的时间点。
+// 只用于「没有 <time datetime> 时按文本猜日期」这条路，判据必须紧：
+// 带年份、能解析、且不是区间。宁可不猜，也不要把活动时间当成发布时间。
+func LooksLikeDate(raw string) bool {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return false
+	}
+	for _, m := range rangeMarks {
+		if strings.Contains(s, m) {
+			return false
+		}
+	}
+	_, ok := parseDateAs(s)
+	return ok
+}
+
+func parseDateAs(raw string) (time.Time, bool) {
+	s := strings.TrimSpace(raw)
+	for _, l := range dateLayouts {
+		if t, err := time.ParseInLocation(l, s, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 // ParseDate 解析归一后的日期为 Unix 秒；失败返回 0。
 func ParseDate(raw string) int64 {
 	if raw == "" {
@@ -200,6 +241,10 @@ func ParseDate(raw string) int64 {
 		if t, err := time.ParseInLocation(l, raw, time.Local); err == nil {
 			return t.Unix()
 		}
+	}
+	// 与 LooksLikeDate 用同一套形状，免得「看着能解析」却在流水线里算成 0
+	if t, ok := parseDateAs(raw); ok {
+		return t.Unix()
 	}
 	return 0
 }

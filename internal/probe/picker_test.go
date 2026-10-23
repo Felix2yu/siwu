@@ -225,9 +225,10 @@ func TestInferredFieldsExtractItems(t *testing.T) {
 	if f := fields["title"]; !strings.Contains(f.Sel, "h3") {
 		t.Errorf("title 没认出标题元素: %+v", f)
 	}
-	// 日期不能落在「主办单位：」这种标签行上
-	if texts["date"] == "" || !strings.Contains(texts["date"], "-") {
-		t.Errorf("date 推断不对: sel=%q text=%q", fields["date"].Sel, texts["date"])
+	// 活动时间是一段范围（10-18 18:30—10-18 21:00），既不是发布时间也没有年份：
+	// 猜出来只能污染 RSS 的 pubDate，宁可不给这个字段
+	if f := fields["date"]; f.Sel != "" || texts["date"] != "" {
+		t.Errorf("不该把演出时间范围当成日期: sel=%q text=%q", f.Sel, texts["date"])
 	}
 
 	res, err := p.Extract(sid, model.Extract{Item: itemSel, Fields: fields}, nil)
@@ -276,5 +277,78 @@ func TestWarningsAreAggregated(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("警告里缺少 %q，实际：\n%s", want, joined)
 		}
+	}
+}
+
+// 日期字段只在「能解析成一个确定时间点」时才给：
+// 带年份的发布日期要认，区间（活动起止）与无年份的片段一律不认。
+func TestInferDateOnlyWhenParseable(t *testing.T) {
+	cases := []struct {
+		name string
+		tail string // 链接之后的那部分卡片内容
+		want string
+	}{
+		{"发布日期", `<span class="date">2026-10-16</span>`, "2026-10-16"},
+		{"发布时间带时分", `<span class="post-time">2026-10-16 08:30</span>`, "2026-10-16 08:30"},
+		{"time 元素", `<time datetime="2026-10-16T08:30:00+08:00">昨天</time>`, "昨天"},
+		{"中文日期", `<span>2026年10月16日</span>`, "2026年10月16日"},
+		{"活动区间", `<span>2026-10-16 18:30—2026-10-16 21:00</span>`, ""},
+		{"无年份", `<span>10-18 18:30</span>`, ""},
+		{"标签行", `<span>主办单位：艺术教育中心</span>`, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			page := `<html><body><div class="list"><div class="row"><a href="/a">标题</a>` +
+				c.tail + `</div></div></body></html>`
+			p, sid, doc := htmlSession(t, page, "https://example.com/")
+			item := firstOfTag(t, doc, "a")
+			sug, err := p.Suggest(sid, pickerXPathOf(item), "css:.list > .row")
+			if err != nil {
+				t.Fatalf("Suggest 失败: %v", err)
+			}
+			var got string
+			for _, g := range sug.Fields {
+				if g.Name == "date" {
+					got = g.Text
+				}
+			}
+			if c.want == "" {
+				if got != "" {
+					t.Errorf("不该给日期，实际 %q", got)
+				}
+				return
+			}
+			if got != c.want {
+				t.Errorf("日期 = %q，期望 %q", got, c.want)
+			}
+		})
+	}
+}
+
+// 字段里写了日期却解析不出时间点，必须在预览里说出来，
+// 否则用户以为日期是对的（pubDate 实际会退回抓取时间）。
+func TestWarnsWhenDateUnparseable(t *testing.T) {
+	page := `<html><body><div class="list"><div class="row"><a href="/a">标题</a>` +
+		`<span class="date">10-18 18:30—10-18 21:00</span></div></div></body></html>`
+	p, sid, _ := htmlSession(t, page, "https://example.com/")
+	res, err := p.Extract(sid, model.Extract{
+		Item: "css:.list > .row",
+		Fields: map[string]model.Field{
+			"title": {Sel: "css:a"},
+			"link":  {Sel: "css:a", Attr: "href"},
+			"date":  {Sel: "css:.date"},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("抽取失败: %v", err)
+	}
+	var hit bool
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "日期不是可解析的时间") {
+			hit = true
+		}
+	}
+	if !hit {
+		t.Errorf("缺少日期告警，实际 %v", res.Warnings)
 	}
 }

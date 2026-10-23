@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/Felix2yu/siwu/internal/extract"
 	"github.com/Felix2yu/siwu/internal/fetch"
 	"github.com/Felix2yu/siwu/internal/model"
+	"github.com/Felix2yu/siwu/internal/transform"
 	"golang.org/x/net/html"
 )
 
@@ -347,35 +347,27 @@ func isHeading(n *html.Node) bool {
 	return n.Type == html.ElementNode && len(n.Data) == 2 && n.Data[0] == 'h' && n.Data[1] >= '1' && n.Data[1] <= '6'
 }
 
-// dateish 只用来判「这段文字像不像日期」，不追求完整日期解析。
-var dateish = regexp.MustCompile(`\d{1,4}\s*[-/年.]\s*\d{1,2}`)
-
-// isDate 判断节点是否是日期。早先的实现只要标签是 <span> 就算日期，
-// 于是「主办单位：」这种标签行也会被当成日期字段——判据必须来自类名或文本本身。
+// isDate 判断节点是不是条目的「发布时间」。
+// 判据收得很紧：<time datetime> 是机器可读的日期，直接用；其余只认**带年份、能解析、
+// 且不是区间**的文本。演出/活动的「10-02 18:30—10-02 21:00」是时间范围，
+// 既不是发布时间也塞不进 RSS 的 pubDate，宁可不给这个字段。
 func isDate(n *html.Node) bool {
 	if n.Type != html.ElementNode {
 		return false
 	}
 	if n.Data == "time" {
-		return true
+		if dt := extract.NodeValue(n, "datetime"); dt != "" {
+			return transform.LooksLikeDate(dt)
+		}
+		// 没写 datetime 的 <time>（HTML 允许）就退回看文本
 	}
-	cls := strings.ToLower(extract.NodeValue(n, "class"))
-	if strings.Contains(cls, "date") || strings.Contains(cls, "time") {
-		return true
-	}
-	// 日期落在文本节点上，带子元素的容器不算，否则整块卡片都可能被认成日期
-	hasChildElement := false
+	// 日期落在文本节点上：带子元素的容器不算，否则整块卡片都可能被认成日期
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode {
-			hasChildElement = true
-			break
+			return false
 		}
 	}
-	if hasChildElement {
-		return false
-	}
-	txt := extract.NodeValue(n, "")
-	return len([]rune(txt)) <= 40 && dateish.MatchString(txt)
+	return transform.LooksLikeDate(extract.NodeValue(n, ""))
 }
 
 func find(root *html.Node, pred func(*html.Node) bool) *html.Node {

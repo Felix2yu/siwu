@@ -195,6 +195,11 @@ func extractNode(node *html.Node, baseURL string, spec model.Extract, rules []mo
 			if !templated && v == "" && !f.Optional && (name == "title" || name == "link") {
 				warns = append(warns, fmt.Sprintf("条目缺少 %s", name))
 			}
+			// 取到了却解析不出时间点，等于这条日期在 RSS/Atom 里会被退回抓取时间——
+			// 界面上必须说出来，否则用户以为日期是对的（演出时间范围就是典型）。
+			if !templated && name == "date" && v != "" && transform.ParseDate(v) == 0 {
+				warns = append(warns, "日期不是可解析的时间，输出时会退回抓取时间")
+			}
 		}
 	}
 	if item.Link != "" && baseURL != "" {

@@ -48,3 +48,28 @@ func TestRemoveTags(t *testing.T) {
 		t.Fatalf("去标签结果异常: %q", got)
 	}
 }
+
+// 只有「一个确定的时间点」才配叫发布时间：带年份、能解析、不是区间。
+func TestLooksLikeDate(t *testing.T) {
+	yes := []string{
+		"2026-10-16", "2026-10-16 08:30", "2026-10-16 08:30:05",
+		"2026-10-16T08:30:00+08:00", "2026/10/16", "2026.10.16", "2026年10月16日",
+	}
+	no := []string{
+		"", "10-18 18:30", "10-02 18:30—10-02 21:00", "2026-10-16 18:30—2026-10-16 21:00",
+		"2026-10-09 09:32 至 2026-10-18 18:30", "主办单位：艺术教育中心",
+	}
+	for _, s := range yes {
+		if !LooksLikeDate(s) {
+			t.Errorf("应当认作日期: %q", s)
+		}
+		if ParseDate(s) == 0 {
+			t.Errorf("ParseDate 解析不了 %q", s)
+		}
+	}
+	for _, s := range no {
+		if LooksLikeDate(s) {
+			t.Errorf("不该认作日期: %q", s)
+		}
+	}
+}
