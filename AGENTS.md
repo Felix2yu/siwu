@@ -35,6 +35,10 @@ make dev / build / test / lint / fmt / docker / clean / smoke
 - **调度时间统一走 `cronexpr`**：不要在别处手写 cron 换算；失败退避与 cron 的组合规则只在 `planNext` 里
 - **SSE 事件类型固定**：`run.start` / `run.finish` / `notify.ok` / `notify.fail`，前端 `web/src/live.ts` 依赖它们
 - **抓取参数不能静默失效**：`timeout_sec` 是整次抓取（含重试）的上限，HTTP 与浏览器通道都要吃；浏览器通道要注入源级 `headers` / `cookies`（UA 走 `UserAgentOverride`、Cookie 走 `setCookies`、`Referer`/`Origin` 走 `setExtraHTTPHeaders`），凡是浏览器自己管理的头（`sec-*`、`Accept-Encoding`、`Cookie`）不手工覆盖；自己设 `Accept-Encoding` 时只保留能解开的编码（gzip/deflate），否则抽取会变成 0 条
+- **备份契约见 .github 仓 `docs/backup.md`**：`backup` 子命令在 `main()` 最先拦截，
+  只读打开（库不存在报错，不造空库）、`VACUUM INTO` 出一致快照流式写 stdout；
+  stdout 只承载数据，日志一律 stderr。db 形态不含 `secret.key`（恢复必须保留它），
+  zip 形态（`--format zip`）才打包，配合外部工具要同步声明 `BACKUP_SQLITE_EXT=zip`
 
 ## 改动后自查
 

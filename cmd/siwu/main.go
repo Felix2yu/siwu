@@ -28,6 +28,14 @@ import (
 )
 
 func main() {
+	// backup 子命令最先拦截：导出进程不该跑迁移、建目录、产空库（备份契约）。
+	if len(os.Args) > 1 && os.Args[1] == "backup" {
+		if err := runBackup(os.Args[2:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "备份失败:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "启动失败:", err)
 		os.Exit(1)

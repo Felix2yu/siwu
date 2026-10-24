@@ -16,6 +16,14 @@ services:
       # SIWU_FEED_TOKEN: change-me-too
       # 需要 JS 渲染 / 风控站点时，启用下面的 browser 服务并打开这一行
       # SIWU_BROWSER_WS: ws://browser:9222
+      # 外部备份工具（docker-db-auto-backup）经容器内 sh -c 执行本命令自导出快照。
+      # 二进制在 /app 下而 /app 不在 PATH 上，必须写绝对路径（裸名实测 exit 127）。
+      # 值裸写：列表式 KEY="value" 的引号会存进变量值（映射式 KEY: value 安全）。
+      BACKUP_SQLITE_CMD: /app/siwu backup
+      # 想连 secret.key 一起打包成一份产物时，把上面的命令改成
+      # /app/siwu backup --format zip 并打开下一行；不声明 EXT 时工具按
+      # SQLite 魔数校验 zip 产物会判失败（不静默存坏备份，这是有意为之）。
+      # BACKUP_SQLITE_EXT: zip
     volumes:
       - ./data:/app/data
     restart: unless-stopped

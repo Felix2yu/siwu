@@ -110,9 +110,34 @@ services:
     volumes: ["./data:/app/data"]
 ```
 
-数据全在 `./data`（`siwu.db` + `secret.key`），备份目录即可。
+数据全在 `./data`（`siwu.db` + `secret.key`），备份目录即可（详见下节）。
 需要 JS 渲染或风控站点时启用浏览器侧车：`docker compose --profile browser up -d`，
 再设 `SIWU_BROWSER_WS=ws://browser:9222`（或按源单独填）。
+
+### 备份
+
+siwu 内嵌 SQLite，提供 `siwu backup` 子命令输出一致性快照（`VACUUM INTO`，
+事务级一致，不阻塞写入），供外部备份工具 [docker-db-auto-backup](https://github.com/Felix2yu/docker-db-auto-backup)
+经 `docker exec` 调用：
+
+```bash
+# db 形态（默认）：SQLite 快照，恢复 = 放回数据目录
+docker exec siwu sh -c "/app/siwu backup" > siwu-$(date +%F).db
+# zip 形态：库快照 + secret.key，一份产物还原全部
+docker exec siwu sh -c "/app/siwu backup --format zip" > siwu-$(date +%F).zip
+```
+
+- stdout 只承载备份数据，日志走 stderr；数据库文件不存在时报错退出，绝不凭空造空库。
+- `db` 产物恢复：停止容器 → 放回数据目录 → `chown` 修正属主（与 `PUID`/`PGID` 一致）→
+  启动。**务必保留 `secret.key`**：通知目标的 URL 用它加密落库，换了密钥就解不开了。
+- `zip` 产物恢复：解包后把 `siwu.db`、`secret.key` 按原名放回数据目录，其余同上。
+- compose 里 `BACKUP_SQLITE_CMD: /app/siwu backup` 是外部备份工具的声明：
+  二进制在 `/app` 下而 `/app` 不在 `PATH` 上，必须写绝对路径；值**裸写**，不要写成
+  列表式 `KEY="value"`——引号会存进变量值（映射式 `KEY: value` 与整条 `"KEY=value"`
+  是 YAML 语法，安全）。用 zip 形态时把
+  命令改成 `/app/siwu backup --format zip` 并同步声明 `BACKUP_SQLITE_EXT: zip`，
+  否则工具按 `.db` 魔数校验 zip 产物会判失败。
+
 
 ## 开发
 

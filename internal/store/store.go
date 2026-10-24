@@ -24,9 +24,10 @@ var migrations embed.FS
 
 // Store 是所有持久化的入口。写操作串行化，读操作走连接池。
 type Store struct {
-	db  *sql.DB
-	mu  sync.Mutex // 单写者
-	now func() time.Time
+	db   *sql.DB
+	path string     // 主库文件路径，DataDir() 由它推导
+	mu   sync.Mutex // 单写者
+	now  func() time.Time
 }
 
 // Open 打开（必要时创建）数据库并执行迁移。
@@ -43,7 +44,7 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(4)
 	db.SetMaxIdleConns(2)
-	s := &Store{db: db, now: time.Now}
+	s := &Store{db: db, path: path, now: time.Now}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
 		return nil, err
