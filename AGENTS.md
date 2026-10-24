@@ -34,6 +34,7 @@ make dev / build / test / lint / fmt / docker / clean / smoke
 - **哈希语义变更要迁移**：改 `content_hash` 参与字段时，必须同时清空历史哈希，并让空哈希只补基线不算更新（见 `0002_rehash_baseline.sql`）
 - **调度时间统一走 `cronexpr`**：不要在别处手写 cron 换算；失败退避与 cron 的组合规则只在 `planNext` 里
 - **SSE 事件类型固定**：`run.start` / `run.finish` / `notify.ok` / `notify.fail`，前端 `web/src/live.ts` 依赖它们
+- **抓取参数不能静默失效**：`timeout_sec` 是整次抓取（含重试）的上限，HTTP 与浏览器通道都要吃；浏览器通道要注入源级 `headers` / `cookies`（UA 走 `UserAgentOverride`、Cookie 走 `setCookies`、`Referer`/`Origin` 走 `setExtraHTTPHeaders`），凡是浏览器自己管理的头（`sec-*`、`Accept-Encoding`、`Cookie`）不手工覆盖；自己设 `Accept-Encoding` 时只保留能解开的编码（gzip/deflate），否则抽取会变成 0 条
 
 ## 改动后自查
 

@@ -600,7 +600,7 @@ clean:      ; rm -rf bin/* internal/web/dist/* && touch internal/web/dist/.gitke
 
 已实现的能力（对应 §5 的设计承诺）：
 
-- **抓取**：HTTP（字符集嗅探、体积上限、条件请求、代理）与浏览器（CDP，外置 headless-shell 或本机 Chrome）；`json` 型可「在页面上下文里请求」以穿透 WAF 签名。
+- **抓取**：HTTP（字符集嗅探、体积上限、条件请求、代理）与浏览器（CDP，外置 headless-shell 或本机 Chrome）；`json` 型可「在页面上下文里请求」以穿透 WAF 签名。两条通道都套用源级请求头与 Cookie（浏览器侧 UA 走 `UserAgentOverride`、Cookie 走 `setCookies`、`Referer`/`Origin` 走 `setExtraHTTPHeaders`，`sec-*` 与 `Accept-Encoding` 仍由浏览器生成）；自定义 `Accept-Encoding` 只保留可解编码并补解压；`timeout_sec` 是整次抓取（含重试）的上限。
 - **抽取**：XPath 1.0 / CSS / JSONPath / 模板；属性取值统一「元素 + `attr`」；条目级 `exclude` 选择器；重复块泛化与字段推断（框选器）。
 - **清洗**：12 个算子（含 `lower`/`upper`/`date_parse`/`regex_extract`），保存时校验 RE2；`normalize` 正则参与内容哈希，计数噪声不算更新。
 - **去重**：`entry_key` + `content_hash`；`ignore`/`update`/`archive` 三策略；升级迁移有基线保护。

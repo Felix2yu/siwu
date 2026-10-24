@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/Felix2yu/siwu/internal/model"
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/emulation"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/remote"
 )
@@ -60,6 +63,11 @@ func (f *Fetcher) browserPage(ctx context.Context, src model.Source) (Response, 
 	}
 	defer stop()
 
+	// 源配置里的 UA/请求头/Cookie 必须在导航前注入，否则这次请求用不上。
+	if err := f.applyProfile(tabCtx, newBrowserProfile(src.Request.Headers, src.Request.Cookies), src.URL); err != nil {
+		return Response{}, err
+	}
+
 	if err := chromedp.Do(tabCtx, chromedp.Navigate(src.URL)); err != nil {
 		return Response{}, fmt.Errorf("浏览器打开页面失败: %w", err)
 	}
@@ -96,6 +104,13 @@ func (f *Fetcher) browserAPI(ctx context.Context, src model.Source) (Response, e
 	}
 	defer stop()
 
+	// 前置页面与接口若不同域，Cookie 两边都要落，否则 credentials:'include' 带不上。
+	// 导航前只套页面级画像：接口的 Referer 要在导航后覆盖，否则页面也带上接口的 Referer。
+	pageProfile := newBrowserProfile(src.Request.Headers, src.Request.Cookies)
+	if err := f.applyProfile(tabCtx, pageProfile, src.URL, api.URL); err != nil {
+		return Response{}, err
+	}
+
 	if err := chromedp.Do(tabCtx, chromedp.Navigate(src.URL)); err != nil {
 		return Response{}, fmt.Errorf("浏览器打开前置页面失败: %w", err)
 	}
@@ -111,13 +126,25 @@ func (f *Fetcher) browserAPI(ctx context.Context, src model.Source) (Response, e
 	}
 	_ = chromedp.Do(tabCtx, chromedp.Sleep(time.Duration(wait)*time.Millisecond))
 
+	// 接口级画像覆盖 tab 级头：Referer/Origin 这类 fetch 设不了的头只能这样带。
+	// Network.setExtraHTTPHeaders 是整体替换，所以要带上源级业务头再合并。
+	apiProfile := newBrowserProfile(src.Request.Headers, src.Request.Cookies)
+	apiProfile.mergeAPI(api.Headers)
+	if err := f.applyProfile(tabCtx, apiProfile, api.URL); err != nil {
+		return Response{}, err
+	}
+
 	method := api.Method
 	if method == "" {
 		method = http.MethodGet
 	}
-	headers := api.Headers
-	if headers == nil {
-		headers = map[string]string{}
+	// fetch init 只放脚本能设置的头；Referer/Origin/UA/Cookie 走 tab 级注入。
+	headers := make(map[string]string, len(api.Headers))
+	for k, v := range api.Headers {
+		if isFetchForbidden(k) {
+			continue
+		}
+		headers[k] = v
 	}
 	headersJSON, err := json.Marshal(headers)
 	if err != nil {
@@ -173,4 +200,50 @@ func (f *Fetcher) tab(ctx context.Context, src model.Source) (context.Context, f
 		cancel()
 	}
 	return tabCtx, stop, nil
+}
+
+// applyProfile 把源配置的 UA、附加请求头与 Cookie 注入 tab。
+// 必须在 Navigate 之前调用：Network.setExtraHTTPHeaders 只对之后发出的请求生效。
+func (f *Fetcher) applyProfile(ctx context.Context, p browserProfile, urls ...string) error {
+	if p.UA == "" && len(p.Extra) == 0 && len(p.Cookies) == 0 {
+		return nil
+	}
+	err := chromedp.Do(ctx, chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+		if p.UA != "" {
+			// 只换 UA 字符串不会同步 Sec-CH-UA，严格站点仍可能看出不一致；
+			// 需要完全一致时用真实浏览器通道即可，这里只解决「UA 被名单挡」。
+			if _, err := cdp.Call(ctx, t, emulation.SetUserAgentOverride,
+				emulation.SetUserAgentOverrideParams{UserAgent: p.UA}); err != nil {
+				return fmt.Errorf("设置 UA 失败: %w", err)
+			}
+		}
+		if len(p.Extra) > 0 {
+			if _, err := cdp.Call(ctx, t, network.SetExtraHTTPHeaders,
+				network.SetExtraHTTPHeadersParams{Headers: network.Headers(p.Extra)}); err != nil {
+				return fmt.Errorf("注入请求头失败: %w", err)
+			}
+		}
+		if params := cookieParams(p.Cookies, urls); len(params) > 0 {
+			if _, err := cdp.Call(ctx, t, network.SetCookies,
+				network.SetCookiesParams{Cookies: params}); err != nil {
+				return fmt.Errorf("注入 Cookie 失败: %w", err)
+			}
+		}
+		return nil
+	}))
+	if err != nil {
+		return fmt.Errorf("浏览器通道套用源配置: %w", err)
+	}
+	return nil
+}
+
+func cookieParams(cookies []cookiePair, urls []string) []*network.CookieParam {
+	origins := cookieOrigins(urls)
+	out := make([]*network.CookieParam, 0, len(origins)*len(cookies))
+	for _, origin := range origins {
+		for _, c := range cookies {
+			out = append(out, &network.CookieParam{Name: c.Name, Value: c.Value, URL: origin})
+		}
+	}
+	return out
 }

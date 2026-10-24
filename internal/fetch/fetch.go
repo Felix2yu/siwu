@@ -76,6 +76,13 @@ func (f *Fetcher) Do(ctx context.Context, req Request) (Response, error) {
 	if err := f.checkURL(req.URL); err != nil {
 		return Response{}, err
 	}
+	// Timeout 是整次抓取（含重试）的上限，单次请求另受 client.Timeout 约束。
+	// 不接这个字段的话，源配置里的 timeout_sec 在 HTTP 通道上等于没写。
+	if req.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, req.Timeout)
+		defer cancel()
+	}
 	method := req.Method
 	if method == "" {
 		method = http.MethodGet
@@ -121,6 +128,15 @@ func (f *Fetcher) once(ctx context.Context, method string, req Request) (Respons
 	for k, v := range req.Cookies {
 		hr.AddCookie(&http.Cookie{Name: k, Value: v})
 	}
+	// 显式设置 Accept-Encoding 时 Transport 不再自动解压，所以只保留解压端支持的
+	// 编码；如果全都不支持（例如只写了 br），删掉该头交回 Transport 自动 gzip。
+	if ae := hr.Header.Get("Accept-Encoding"); ae != "" {
+		if kept := filterAcceptEncoding(ae); wantsCompression(kept) {
+			hr.Header.Set("Accept-Encoding", kept)
+		} else {
+			hr.Header.Del("Accept-Encoding")
+		}
+	}
 	if req.Proxy != "" {
 		pu, err := url.Parse(req.Proxy)
 		if err != nil {
@@ -150,6 +166,13 @@ func (f *Fetcher) read(resp *http.Response) (Response, error) {
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, f.opts.MaxBytes))
 	if err != nil {
 		return Response{}, err
+	}
+	// 自己设过 Accept-Encoding 时 Transport 不会自动解压，这里按响应头补解。
+	if enc := resp.Header.Get("Content-Encoding"); enc != "" && !resp.Uncompressed {
+		raw, err = decodeBody(raw, enc, f.opts.MaxBytes)
+		if err != nil {
+			return Response{}, err
+		}
 	}
 	ct := resp.Header.Get("Content-Type")
 	out := Response{ContentType: ct, Status: resp.StatusCode, FinalURL: resp.Request.URL.String()}
