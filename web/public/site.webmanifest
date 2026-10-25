@@ -1,0 +1,25 @@
+{
+  "name": "司寤 siwu",
+  "short_name": "司寤",
+  "description": "把任意网页变成可订阅的 RSS，并在变化发生时立刻通知你。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0E111A",
+  "theme_color": "#007C65",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    {
+      "src": "/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

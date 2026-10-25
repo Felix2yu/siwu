@@ -4,7 +4,20 @@ package web
 import (
 	"embed"
 	"io/fs"
+	"mime"
 )
+
+// 前端资产自带类型映射：scratch 容器里没有系统 mime 表，SVG 图标和
+// manifest 会被 ServeContent 嗅探成 text/plain，部分浏览器会拒绝加载。
+func init() {
+	for ext, typ := range map[string]string{
+		".svg":         "image/svg+xml",
+		".ico":         "image/x-icon",
+		".webmanifest": "application/manifest+json",
+	} {
+		_ = mime.AddExtensionType(ext, typ)
+	}
+}
 
 //go:embed all:dist
 var embedded embed.FS

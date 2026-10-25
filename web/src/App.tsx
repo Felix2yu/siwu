@@ -6,6 +6,20 @@ import { api } from './api'
 import { Button, Input, cn } from './components/ui'
 import { startLive, useLive } from './live'
 
+// 品牌标记：守夜的弦月与一颗通知点；月牙随前景色，点用主题 accent
+function Mark({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M258 86a172 172 0 1 0 168 208 138 138 0 0 1-168-208Z"
+        fill="currentColor"
+      />
+      <circle cx="402" cy="116" r="40" fill="var(--c-accent)" />
+    </svg>
+  )
+}
+
 function Login({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -29,7 +43,8 @@ function Login({ onDone }: { onDone: () => void }) {
         onSubmit={submit}
         className="w-full max-w-xs rounded-lg border border-line-soft bg-panel p-5"
       >
-        <div className="mb-4 flex items-baseline gap-2">
+        <div className="mb-4 flex items-center gap-2.5">
+          <Mark size={22} />
           <span className="text-[18px] tracking-[0.2em]">司寤</span>
           <span className="font-mono text-[11px] text-faint">siwu</span>
         </div>
@@ -95,7 +110,8 @@ export default function App() {
   return (
     <div className="flex h-full">
       <aside className="flex w-[196px] shrink-0 flex-col border-r border-line-soft bg-panel/60">
-        <div className="flex items-baseline gap-2 px-4 pt-4 pb-3">
+        <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+          <Mark size={20} />
           <span className="text-[17px] tracking-[0.22em]">司寤</span>
           <span className="font-mono text-[10px] text-faint">siwu</span>
         </div>
