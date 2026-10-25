@@ -120,7 +120,7 @@ func TestHTMLLinkTemplateUsesLaterField(t *testing.T) {
 		Fields: map[string]model.Field{
 			"title": {Sel: "css:.title"},
 			"guid":  {Sel: "xpath:.", Attr: "id", Transforms: []string{"pid"}},
-			"link":  {Template: "https://szwtfz.maitix.com/h5/#/detail?projectId={guid}"},
+			"link":  {Template: "https://szwtfz.maitix.com/h5/#/pages-order/projectDetail/index?projectId={guid}"},
 			"date":  {Sel: "css:.time"},
 		},
 	}
@@ -133,7 +133,8 @@ func TestHTMLLinkTemplateUsesLaterField(t *testing.T) {
 		t.Fatalf("应命中 1 条，实际 %d", res.Matched)
 	}
 	got := res.Items[0]
-	if got.Link != "https://szwtfz.maitix.com/h5/#/detail?projectId=234972004" {
+	// 麦座 H5 实测可用的详情路由；projectId 就是卡片 id 里的 projectToken
+	if got.Link != "https://szwtfz.maitix.com/h5/#/pages-order/projectDetail/index?projectId=234972004" {
 		t.Fatalf("链接模板未取到 guid：%q", got.Link)
 	}
 	if got.GUID != "234972004" {
