@@ -257,7 +257,7 @@ GET /api/preview/{sid}   ← iframe sandbox="allow-scripts"（不给 allow-same-
 
 ### 5.6 调度与容错
 
-最小堆 + worker 池（默认 4）+ 单源租约（`runs` 表 running + lease）+ 指数退避（`min(interval, 60s×2^n)`，上限 1h，±10% 抖动）+ 连续 3 次 0 条告警（静默失效比报错隐蔽）。测试用 `testing/synctest` 把退避与租约压缩到毫秒级。
+最小堆 + worker 池（默认 4）+ 单源租约（`runs` 表 running + lease）+ 指数退避（`min(interval, 60s×2^n)`，上限 1h，带整分钟漂移）+ 连续 3 次 0 条告警（静默失效比报错隐蔽）。测试用 `testing/synctest` 把退避与租约压缩到毫秒级。
 
 ### 5.7 RSS 输出
 
@@ -605,7 +605,8 @@ clean:      ; rm -rf bin/* internal/web/dist/* && touch internal/web/dist/.gitke
 - **清洗**：12 个算子（含 `lower`/`upper`/`date_parse`/`regex_extract`），保存时校验 RE2；`normalize` 正则参与内容哈希，计数噪声不算更新。
 - **去重**：`entry_key` + `content_hash`；`ignore`/`update`/`archive` 三策略；升级迁移有基线保护。
 - **page 型**：区域快照、噪声正则、`min_changed_lines` 阈值、行级 diff、变化留版本。
-- **调度**：固定间隔 + cron（5 字段与 `@every`）、±10% 抖动、失败指数退避（上限 1h）、DB 原子租约（多实例安全）、动态等待最近到期。
+- **调度**：固定间隔 + cron（5 字段与 `@every`）、整分钟漂移（间隔 ±周期 1/10 且不超过 10 分钟，cron 只向后延后不超过 5 分钟）、失败指数退避（上限 1h）、DB 原子租约（多实例安全）、动态等待最近到期。
+- **时间精度**：不需要秒级精度——间隔最少 1 分钟、默认 60 分钟，界面上按分钟填写（不用口算 3600），漂移以整分钟为单位，落点不会固定在整点。
 - **通知**：apprise 214 协议；5 类触发（新增/更新/失败/恢复/静默失效）；`immediate`/`batch`(30s)/`digest`(每日定点)；详略三档；同源节流；静默时段；失败重试 3 次并回写运行告警；成功后写 `notified_at`。
 - **交付**：RSS 2.0（`content:encoded`）/Atom/JSON Feed、gzip、ETag/Last-Modified/304、`?k=` 订阅令牌、OPML 导出、SSE 实时事件。
 - **鉴权**：`SIWU_PASSWORD` 口令 + 30 天会话 Cookie；`/api/healthz`、`/f/*` 免登录（订阅用令牌保护）。

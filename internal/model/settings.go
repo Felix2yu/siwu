@@ -17,7 +17,7 @@ type SourceDefaults struct {
 // DefaultSettings 返回与前端 blankSource 一致的内置默认值。
 func DefaultSettings() Settings {
 	return Settings{Defaults: SourceDefaults{
-		IntervalSec: 3600,
+		IntervalSec: DefaultIntervalSec,
 		MaxItems:    50,
 		UpdateMode:  "update",
 	}}
@@ -26,9 +26,7 @@ func DefaultSettings() Settings {
 // Normalize 收敛越界值，避免坏值落库后让新建源行为异常。
 func (s *Settings) Normalize() {
 	d := &s.Defaults
-	if d.IntervalSec <= 0 {
-		d.IntervalSec = 3600
-	}
+	d.IntervalSec = ClampInterval(d.IntervalSec)
 	if d.MaxItems <= 0 {
 		d.MaxItems = 50
 	}

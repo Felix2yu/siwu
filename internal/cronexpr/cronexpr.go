@@ -31,6 +31,9 @@ func (s Schedule) String() string { return s.expr }
 // IsEvery 表示这是 @every 形式（按固定时长，而不是日历对齐）。
 func (s Schedule) IsEvery() bool { return s.every > 0 }
 
+// Every 返回 @every 的周期，非 @every 形式返回 0。
+func (s Schedule) Every() time.Duration { return s.every }
+
 // Parse 解析表达式。
 func Parse(expr string) (Schedule, error) {
 	raw := strings.TrimSpace(expr)

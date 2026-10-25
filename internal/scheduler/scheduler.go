@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"strings"
 	"sync"
 	"time"
@@ -221,12 +220,12 @@ func (s *Scheduler) RunSource(ctx context.Context, src model.Source, trigger str
 // planNext 计算下次触发时刻与新的连续失败次数。
 //
 // 规则：cron 优先；失败按 60s×2^(n-1) 指数退避（上限 1h，且不晚于 cron 的下次时刻）；
-// 固定间隔加 ±10% 抖动，cron 按日历精确触发。
+// 固定间隔带 ±(周期 1/10，最多 10 分钟) 的整分钟漂移。
+//
+// 漂移的目的不是偷懒，而是让落点看起来不像机器定时：整点、固定分钟都不该成为特征。
+// cron 同样不再精确到分——日历时刻上加 0~5 分钟的延后（只向后偏，不会早于用户写的时刻）。
 func planNext(src model.Source, finished time.Time, failed bool) (time.Time, int, []string) {
-	interval := int64(src.Policy.IntervalSec)
-	if interval <= 0 {
-		interval = 3600
-	}
+	interval := model.ClampInterval(src.Policy.IntervalSec)
 	var warns []string
 	cronSch, hasCron, cronErr := cronOf(src)
 	if cronErr != nil {
@@ -235,11 +234,11 @@ func planNext(src model.Source, finished time.Time, failed bool) (time.Time, int
 
 	if !failed {
 		if hasCron {
-			if n := cronSch.Next(finished); !n.IsZero() {
+			if n := nextCron(cronSch, finished); !n.IsZero() {
 				return n, 0, warns
 			}
 		}
-		return finished.Add(time.Duration(withJitter(interval)) * time.Second), 0, warns
+		return nextInterval(finished, interval), 0, warns
 	}
 
 	failures := src.Failures + 1
@@ -247,26 +246,53 @@ func planNext(src model.Source, finished time.Time, failed bool) (time.Time, int
 	if backoff > maxBackoff {
 		backoff = maxBackoff
 	}
-	cand := finished.Add(time.Duration(withJitter(backoff)) * time.Second)
+	cand := finished.Add(backoffDuration(backoff))
 	if hasCron {
 		// 失败时退避可以提前探活，但没必要晚于正常的下次时刻
-		if cn := cronSch.Next(finished); !cn.IsZero() && cand.After(cn) {
+		if cn := nextCron(cronSch, finished); !cn.IsZero() && cand.After(cn) {
 			cand = cn
 		}
-	} else {
-		capSec := interval
-		if capSec > maxBackoff {
-			capSec = maxBackoff
-		}
-		if backoff >= capSec {
-			// 退避不必超过正常间隔
-			cand = finished.Add(time.Duration(withJitter(capSec)) * time.Second)
-		}
+	} else if capSec := min(interval, int(maxBackoff)); backoff >= int64(capSec) {
+		// 退避不必超过正常间隔
+		cand = nextInterval(finished, interval)
 	}
 	if cand.Before(finished.Add(30 * time.Second)) {
 		cand = finished.Add(30 * time.Second)
 	}
 	return cand, failures, warns
+}
+
+// nextInterval 返回带漂移的下一次固定间隔时刻。
+// 漂移是整分钟的，秒位沿用本次完成时刻——不再另加秒级抖动，也不会因为取整把间隔吃掉一分钟。
+func nextInterval(finished time.Time, intervalSec int) time.Time {
+	gap := time.Duration(intervalSec+model.DriftSec(intervalSec, model.MaxIntervalDriftSec)) * time.Second
+	return finished.Add(gap).Truncate(time.Second)
+}
+
+// nextCron 在日历时刻上加一段延后，避免每个整点准点触发。
+// 延后窗口随 cron 周期收缩（周期的 1/10，最多 5 分钟），所以「*/5」这类高频
+// 表达式不会被推迟出节奏；@every 是时长型，按固定间隔那样双向漂移。
+func nextCron(sch cronexpr.Schedule, from time.Time) time.Time {
+	if sch.IsEvery() {
+		return nextInterval(from, int(sch.Every().Seconds()))
+	}
+	base := sch.Next(from)
+	if base.IsZero() {
+		return base
+	}
+	period := 0
+	if n := sch.Next(base); !n.IsZero() {
+		period = int(n.Sub(base).Seconds())
+	}
+	if period <= 0 {
+		period = int((24 * time.Hour).Seconds())
+	}
+	return base.Add(time.Duration(model.DelaySec(period, model.MaxCalendarDriftSec)) * time.Second)
+}
+
+// backoffDuration 给退避也加一点整分钟漂移，避免失败后按 1/2/4 分钟整齐重试。
+func backoffDuration(sec int64) time.Duration {
+	return time.Duration(sec)*time.Second + time.Duration(model.DriftSec(int(sec), model.MaxCalendarDriftSec))*time.Second
 }
 
 func cronOf(src model.Source) (cronexpr.Schedule, bool, error) {
@@ -279,19 +305,6 @@ func cronOf(src model.Source) (cronexpr.Schedule, bool, error) {
 		return cronexpr.Schedule{}, false, fmt.Errorf("cron 表达式无效，已退回固定间隔: %v", err)
 	}
 	return sch, true, nil
-}
-
-// withJitter 给间隔加 ±10% 抖动，避免同批源在同一秒集中抓取。
-func withJitter(sec int64) int64 {
-	if sec <= 0 {
-		return sec
-	}
-	j := int64(float64(sec) * (rand.Float64()*0.2 - 0.1))
-	out := sec + j
-	if out < 30 {
-		out = 30
-	}
-	return out
 }
 
 func min(a, b int) int {

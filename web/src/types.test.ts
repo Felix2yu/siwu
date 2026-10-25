@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { applySourceDefaults, blankSource } from './types'
+import {
+  DEFAULT_INTERVAL_SEC,
+  applySourceDefaults,
+  blankSource,
+  intervalMinutes,
+  intervalSeconds,
+} from './types'
 
 describe('blankSource', () => {
   it('默认走 HTTP 通道、列表型，并且是启用的', () => {
@@ -24,7 +30,8 @@ describe('blankSource', () => {
 
   it('调度默认用固定间隔，cron 留空且保留期不限', () => {
     const p = blankSource().policy
-    expect(p.interval_sec).toBe(3600)
+    expect(p.interval_sec).toBe(DEFAULT_INTERVAL_SEC)
+    expect(p.interval_sec % 60).toBe(0)
     expect(p.cron).toBe('')
     expect(p.retention_days).toBe(0)
     expect(p.min_changed_lines).toBe(0)
@@ -68,7 +75,24 @@ describe('applySourceDefaults', () => {
 
   it('没有设置时保持 blankSource 原值', () => {
     const s = applySourceDefaults(blankSource(), undefined)
-    expect(s.policy.interval_sec).toBe(3600)
+    expect(s.policy.interval_sec).toBe(DEFAULT_INTERVAL_SEC)
     expect(s.article.enabled).toBe(false)
+  })
+})
+
+describe('间隔按分钟换算', () => {
+  it('秒转分钟四舍五入，非法值退回默认', () => {
+    expect(intervalMinutes(1800)).toBe(30)
+    expect(intervalMinutes(600)).toBe(10)
+    expect(intervalMinutes(0)).toBe(DEFAULT_INTERVAL_SEC / 60)
+    expect(intervalMinutes(Number.NaN)).toBe(DEFAULT_INTERVAL_SEC / 60)
+  })
+
+  it('分钟转秒且不低于 1 分钟', () => {
+    expect(intervalSeconds(30)).toBe(1800)
+    expect(intervalSeconds(1)).toBe(60)
+    expect(intervalSeconds(0)).toBe(DEFAULT_INTERVAL_SEC)
+    expect(intervalSeconds(-3)).toBe(DEFAULT_INTERVAL_SEC)
+    expect(intervalSeconds(2.4)).toBe(120)
   })
 })

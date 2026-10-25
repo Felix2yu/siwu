@@ -208,9 +208,7 @@ func (s *Source) Defaults() {
 	if s.Extract.Limit <= 0 {
 		s.Extract.Limit = 50
 	}
-	if s.Policy.IntervalSec <= 0 {
-		s.Policy.IntervalSec = 3600
-	}
+	s.Policy.IntervalSec = ClampInterval(s.Policy.IntervalSec)
 	if s.Policy.MaxItems <= 0 {
 		s.Policy.MaxItems = 50
 	}

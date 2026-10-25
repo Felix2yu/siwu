@@ -203,7 +203,8 @@ func (s *Store) SaveSource(src *model.Source) error {
 		src.CreatedAt = now
 		src.UpdatedAt = now
 		if src.NextRunAt == 0 {
-			src.NextRunAt = now + int64(src.Policy.IntervalSec)
+			// 首次运行同样带漂移：同一批新建的源不该在同一分钟集中抓取
+			src.NextRunAt = now + int64(src.Policy.IntervalSec) + int64(model.DelaySec(src.Policy.IntervalSec, model.MaxIntervalDriftSec))
 		}
 		// 同一站点常有多个监控源（列表 + 快照 + 接口），中文名推导出的 slug
 		// 容易撞车。这里自动加 -2/-3 后缀，而不是让用户先去改名字。

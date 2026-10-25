@@ -223,6 +223,23 @@ export interface SourceDefaults {
   article_enabled: boolean
 }
 
+// 间隔在界面上按分钟填写：本应用不需要秒级精度，后端仍以秒存储。
+// 默认 3600 秒 = 60 分钟，不用再口算 4 小时是多少秒。
+export const DEFAULT_INTERVAL_SEC = 3600
+export const MIN_INTERVAL_MIN = 1
+
+/** 把存储的秒换算成界面上的整分钟（老配置可能不是 60 的整数倍）。 */
+export function intervalMinutes(sec: number): number {
+  if (!Number.isFinite(sec) || sec <= 0) return DEFAULT_INTERVAL_SEC / 60
+  return Math.max(MIN_INTERVAL_MIN, Math.round(sec / 60))
+}
+
+/** 把界面上的分钟换算成存储的秒，非法输入退回默认间隔。 */
+export function intervalSeconds(min: number): number {
+  if (!Number.isFinite(min) || min <= 0) return DEFAULT_INTERVAL_SEC
+  return Math.max(MIN_INTERVAL_MIN, Math.round(min)) * 60
+}
+
 export interface SystemInfo {
   version: string
   base_url: string
@@ -304,7 +321,7 @@ export function blankSource(): Source {
       max_chars: 4000,
     },
     policy: {
-      interval_sec: 3600,
+      interval_sec: DEFAULT_INTERVAL_SEC,
       cron: '',
       max_items: 50,
       retention_days: 0,

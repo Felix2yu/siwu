@@ -27,7 +27,13 @@ import {
   cn,
 } from '../components/ui'
 import type { ArticlePreview, Candidate, FieldSpec, RawItem, Source, Suggestion } from '../types'
-import { applySourceDefaults, blankSource } from '../types'
+import {
+  MIN_INTERVAL_MIN,
+  applySourceDefaults,
+  blankSource,
+  intervalMinutes,
+  intervalSeconds,
+} from '../types'
 import type { SourceView } from '../types'
 
 const FIELD_NAMES = ['title', 'link', 'date', 'summary', 'category', 'content'] as const
@@ -549,12 +555,16 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
                 checked={draft.enabled}
                 onChange={(e) => patch((d) => void (d.enabled = e.target.checked))}
               />
-              <Field label="间隔（秒）" className="w-28">
+              <Field label="间隔（分钟）" className="w-28">
                 <Input
                   type="number"
-                  value={draft.policy.interval_sec}
+                  min={MIN_INTERVAL_MIN}
+                  step={1}
+                  value={intervalMinutes(draft.policy.interval_sec)}
                   onChange={(e) =>
-                    patch((d) => void (d.policy.interval_sec = Number(e.target.value)))
+                    patch(
+                      (d) => void (d.policy.interval_sec = intervalSeconds(Number(e.target.value))),
+                    )
                   }
                 />
               </Field>
@@ -567,7 +577,10 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="cron 表达式" hint="如 0 9 * * 1-5，优先于间隔">
+              <Field
+                label="cron 表达式"
+                hint="如 0 9 * * 1-5，优先于间隔；实际触发会随机延后几分钟"
+              >
                 <Input
                   value={draft.policy.cron}
                   placeholder="留空则用间隔"

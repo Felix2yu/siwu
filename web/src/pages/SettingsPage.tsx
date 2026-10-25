@@ -8,6 +8,7 @@ import { Button, Empty, Field, Input, Panel, PanelHead, Select, Switch, cn } fro
 import { loadThemeMode, saveThemeMode } from '../theme'
 import type { ThemeMode } from '../theme'
 import type { SourceDefaults, SystemInfo } from '../types'
+import { intervalMinutes, intervalSeconds } from '../types'
 
 const THEMES = [
   { value: 'system', label: '跟随系统', icon: Monitor },
@@ -96,11 +97,15 @@ function DefaultsPanel({ initial }: { initial: SourceDefaults }) {
       <PanelHead title="新建源默认值" desc="只影响之后创建的源，已有源保持原配置" />
       <div className="space-y-2 px-3 py-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Field label="间隔（秒）">
+          <Field label="间隔（分钟）" hint="随机漂移几分钟，不固定整点">
             <Input
               type="number"
-              value={form.interval_sec}
-              onChange={(e) => setForm({ ...form, interval_sec: Number(e.target.value) })}
+              min={1}
+              step={1}
+              value={intervalMinutes(form.interval_sec)}
+              onChange={(e) =>
+                setForm({ ...form, interval_sec: intervalSeconds(Number(e.target.value)) })
+              }
             />
           </Field>
           <Field label="输出条数">

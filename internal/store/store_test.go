@@ -40,7 +40,7 @@ func TestSaveAndLoadSource(t *testing.T) {
 	if got.Extract.Fields["link"].Attr != "href" || !got.Extract.Fields["link"].Absolute {
 		t.Fatalf("字段配置未正确往返: %+v", got.Extract.Fields["link"])
 	}
-	if got.Policy.IntervalSec != 3600 {
+	if got.Policy.IntervalSec != model.DefaultIntervalSec {
 		t.Fatalf("默认值未补齐: %d", got.Policy.IntervalSec)
 	}
 }
@@ -80,7 +80,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Defaults.IntervalSec != 3600 || got.Defaults.UpdateMode != "update" {
+	if got.Defaults.IntervalSec != model.DefaultIntervalSec || got.Defaults.UpdateMode != "update" {
 		t.Fatalf("未保存时应返回内置默认值: %+v", got.Defaults)
 	}
 	want := model.Settings{Defaults: model.SourceDefaults{

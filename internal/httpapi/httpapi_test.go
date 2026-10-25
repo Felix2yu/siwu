@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bufio"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -183,7 +184,7 @@ func TestSettingsAPI(t *testing.T) {
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	body, _ = io.ReadAll(rec.Result().Body)
-	if !strings.Contains(string(body), `"interval_sec":3600`) ||
+	if !strings.Contains(string(body), fmt.Sprintf(`"interval_sec":%d`, model.DefaultIntervalSec)) ||
 		!strings.Contains(string(body), `"update_mode":"update"`) {
 		t.Errorf("越界值未收敛: %s", body)
 	}
