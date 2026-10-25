@@ -19,12 +19,14 @@ function statusOf(s: SourceView, running: boolean) {
   return { text: '正常', tone: 'accent' as const }
 }
 
+// 统计块固定三行（标题 / 数值 / 备注），备注为空时也占位，
+// 否则带备注和不带备注的块上下错位，数字会「高高低低」。
 function Metric({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
     <div className="min-w-[92px]">
-      <p className="text-[11px] text-faint">{label}</p>
+      <p className="text-[11px] leading-4 text-faint">{label}</p>
       <p className="mt-0.5 font-mono text-[17px] leading-none tabular-nums">{value}</p>
-      {hint ? <p className="mt-0.5 text-[10px] text-faint">{hint}</p> : null}
+      <p className="mt-1 text-[10px] leading-3 text-faint">{hint ?? '\u00A0'}</p>
     </div>
   )
 }
@@ -87,7 +89,7 @@ export default function SourcesPage() {
         </div>
       ) : null}
       {stats.data ? (
-        <div className="flex flex-wrap items-end gap-x-8 gap-y-2 border-b border-line-soft px-5 py-3">
+        <div className="flex flex-wrap items-start gap-x-8 gap-y-2 border-b border-line-soft px-5 py-3">
           <Metric label="监控源" value={stats.data.sources} hint={`${stats.data.enabled} 个启用`} />
           <Metric label="条目总数" value={stats.data.entries} />
           <Metric label="今日新增" value={stats.data.new_today} />
@@ -101,7 +103,7 @@ export default function SourcesPage() {
             value={stats.data.empty_runs_24h}
             hint={stats.data.empty_runs_24h > 0 ? '选择器可能失效' : '无'}
           />
-          <div className="ml-auto text-right text-[11px] text-faint">
+          <div className="ml-auto self-center text-right text-[11px] text-faint">
             <p>上次运行 {relTime(stats.data.last_run_at)}</p>
             <p>下次运行 {relTime(stats.data.next_run_at)}</p>
           </div>
