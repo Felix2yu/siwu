@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,6 +18,7 @@ import (
 	"github.com/Felix2yu/siwu/internal/events"
 	"github.com/Felix2yu/siwu/internal/model"
 	"github.com/Felix2yu/siwu/internal/notify"
+	"github.com/Felix2yu/siwu/internal/scheduler"
 	"github.com/Felix2yu/siwu/internal/secretbox"
 	"github.com/Felix2yu/siwu/internal/store"
 )
@@ -38,6 +41,7 @@ func testServer(t *testing.T, feedToken string) (*Server, *store.Store) {
 		Notifier: notify.New(st, box, log),
 		BaseURL:  "https://siwu.example", FeedToken: feedToken, Version: "test",
 	}
+	srv.Scheduler = scheduler.New(nil, st, log, 1)
 	return srv, st
 }
 
@@ -73,6 +77,64 @@ func do(t *testing.T, srv *Server, path string, headers map[string]string) *http
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	return rec.Result()
+}
+
+func putSource(t *testing.T, srv *Server, src model.Source) model.Source {
+	t.Helper()
+	body, err := json.Marshal(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/sources/%d", src.ID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("保存源应 200，实际 %d: %s", rec.Code, rec.Body.String())
+	}
+	var got model.Source
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func TestUpdateSourceReschedulesOnPolicyChange(t *testing.T) {
+	srv, st := testServer(t, "")
+	src := model.Source{
+		Name: "新闻", Kind: model.KindHTML, URL: "https://example.com", Enabled: true,
+		Extract: model.Extract{Item: "article", Fields: map[string]model.Field{"title": {Sel: "h2"}}},
+		Policy:  model.Policy{IntervalSec: 3600},
+	}
+	if err := st.SaveSource(&src); err != nil {
+		t.Fatal(err)
+	}
+
+	// 改间隔后应按新间隔从保存时刻重排
+	src.Policy.IntervalSec = 600
+	start := time.Now()
+	first := putSource(t, srv, src)
+	wait := time.Unix(first.NextRunAt, 0).Sub(start)
+	if wait < 540*time.Second || wait > 660*time.Second {
+		t.Fatalf("改间隔后下次运行应在 9~11 分钟后，实际 %s", wait)
+	}
+	stored, err := st.GetSource(src.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.NextRunAt != first.NextRunAt {
+		t.Fatalf("下次运行时间未落库：响应 %d，库内 %d", first.NextRunAt, stored.NextRunAt)
+	}
+	if stored.Policy.IntervalSec != 600 {
+		t.Fatalf("间隔未落库：期望 600，实际 %d", stored.Policy.IntervalSec)
+	}
+
+	// 只改名字不应重排
+	src.Name = "新闻（改名）"
+	second := putSource(t, srv, src)
+	if second.NextRunAt != first.NextRunAt {
+		t.Fatalf("未改调度却被重排：%d -> %d", first.NextRunAt, second.NextRunAt)
+	}
 }
 
 func TestFeedTokenAndConditional(t *testing.T) {

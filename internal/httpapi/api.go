@@ -110,7 +110,6 @@ func (s *Server) updateSource(w http.ResponseWriter, r *http.Request) {
 	}
 	src.ID = id
 	src.CreatedAt = old.CreatedAt
-	src.NextRunAt = old.NextRunAt
 	if src.Slug == "" {
 		src.Slug = old.Slug
 	}
@@ -118,11 +117,22 @@ func (s *Server) updateSource(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	src.NextRunAt = old.NextRunAt
+	if src.Enabled && scheduleChanged(old, src) {
+		// 改了间隔/cron 就按新策略从现在重排，否则界面上的下次运行时间会一直沿用旧值
+		src.NextRunAt = scheduler.NextAfter(src, time.Now()).Unix()
+	}
 	if err := s.Store.SaveSource(&src); err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
+	s.Scheduler.Kick()
 	writeJSON(w, http.StatusOK, s.view(src))
+}
+
+func scheduleChanged(old, next model.Source) bool {
+	return old.Policy.IntervalSec != next.Policy.IntervalSec ||
+		strings.TrimSpace(old.Policy.Cron) != strings.TrimSpace(next.Policy.Cron)
 }
 
 func (s *Server) deleteSource(w http.ResponseWriter, r *http.Request) {

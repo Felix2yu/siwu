@@ -217,6 +217,13 @@ func (s *Scheduler) RunSource(ctx context.Context, src model.Source, trigger str
 	return out, err
 }
 
+// NextAfter 按当前策略推算 now 之后的下次触发时刻。
+// 只用于配置变更后的重排：忽略历史失败退避，按正常节奏排。
+func NextAfter(src model.Source, now time.Time) time.Time {
+	next, _, _ := planNext(src, now, false)
+	return next
+}
+
 // planNext 计算下次触发时刻与新的连续失败次数。
 //
 // 规则：cron 优先；失败按 60s×2^(n-1) 指数退避（上限 1h，且不晚于 cron 的下次时刻）；
