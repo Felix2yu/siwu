@@ -149,7 +149,7 @@ export default function SourcesPage() {
         desc="每个源定时抓取一次，产出 RSS / Atom / JSON Feed，并按策略推送通知"
         actions={
           <>
-            <a href={api.opmlUrl} download="siwu.opml">
+            <a href={api.opmlUrl} download="feeds.opml">
               <Button variant="ghost" title="把所有订阅导出为 OPML，可导入任意阅读器">
                 <Download size={13} /> OPML
               </Button>

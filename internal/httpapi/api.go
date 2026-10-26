@@ -531,7 +531,7 @@ func (s *Server) testTargets(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if err := s.Notifier.Send(ctx, urls, "司寤 siwu 测试通知", "<p>如果你收到这条消息，说明通知通道已打通。</p>", apprise.NotifyInfo); err != nil {
+	if err := s.Notifier.Send(ctx, urls, "司寤测试通知", "<p>如果你收到这条消息，说明通知通道已打通。</p>", apprise.NotifyInfo); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
@@ -685,7 +685,7 @@ func (s *Server) exportOPML(w http.ResponseWriter, r *http.Request) {
 		Body    body     `xml:"body"`
 	}{
 		Version: "2.0",
-		Head:    head{Title: "司寤 siwu 订阅"},
+		Head:    head{Title: "司寤订阅"},
 	}
 	suffix := ""
 	if s.FeedToken != "" {
@@ -709,7 +709,7 @@ func (s *Server) exportOPML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/x-opml; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="siwu.opml"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="feeds.opml"`)
 	_, _ = w.Write([]byte(xml.Header))
 	_, _ = w.Write(out)
 }

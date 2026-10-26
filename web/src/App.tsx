@@ -46,7 +46,6 @@ function Login({ onDone }: { onDone: () => void }) {
         <div className="mb-4 flex items-center gap-2.5">
           <Mark size={22} />
           <span className="text-[18px] tracking-[0.2em]">司寤</span>
-          <span className="font-mono text-[11px] text-faint">siwu</span>
         </div>
         <Input
           type="password"
@@ -113,7 +112,6 @@ export default function App() {
         <div className="flex items-center gap-2 px-4 pt-4 pb-3">
           <Mark size={20} />
           <span className="text-[17px] tracking-[0.22em]">司寤</span>
-          <span className="font-mono text-[10px] text-faint">siwu</span>
         </div>
         <nav className="flex flex-col gap-0.5 px-2">
           {nav.map((item) => (

@@ -170,7 +170,7 @@ function SystemPanel({ info }: { info: SystemInfo }) {
 
   return (
     <Panel>
-      <PanelHead title="系统" desc="来自启动参数与环境变量，修改后需重启 siwu" />
+      <PanelHead title="系统" desc="来自启动参数与环境变量，修改后需重启服务" />
       <dl className="grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-1.5 px-3 py-3 text-[12px]">
         {rows.map((row) => (
           <div key={row.label} className="contents">

@@ -141,7 +141,7 @@ func feedTitle(src model.Source) string {
 }
 
 func feedDescription(src model.Source) string {
-	return fmt.Sprintf("司寤 siwu 监控 · %s · %s", kindLabel(src.Kind), src.URL)
+	return fmt.Sprintf("司寤监控 · %s · %s", kindLabel(src.Kind), src.URL)
 }
 
 func kindLabel(k model.Kind) string {

@@ -6,7 +6,7 @@ import { PageHead } from '../App'
 import { Badge, Button, Empty, Field, Input, Panel, PanelHead } from '../components/ui'
 
 const EXAMPLES = [
-  { label: 'ntfy', url: 'ntfys://ntfy.example.com/siwu' },
+  { label: 'ntfy', url: 'ntfys://ntfy.example.com/monitor' },
   { label: 'Telegram', url: 'tgram://bot_token/chat_id' },
   { label: 'Bark (iOS)', url: 'bark://host/key' },
   { label: '企业微信群机器人', url: 'wecom://key' },
@@ -163,7 +163,7 @@ export default function TargetsPage() {
             <Field label="Apprise 地址">
               <Input
                 value={url}
-                placeholder="ntfys://ntfy.example.com/siwu"
+                placeholder="ntfys://ntfy.example.com/monitor"
                 onChange={(e) => setUrl(e.target.value)}
               />
             </Field>
