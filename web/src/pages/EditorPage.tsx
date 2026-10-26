@@ -421,6 +421,9 @@ function EditorForm({ initial, editing }: { initial: Source; editing: boolean })
       return editing ? api.updateSource(payload) : api.createSource(payload)
     },
     onSuccess: (res) => {
+      // 单源缓存也要回填，否则退出再编辑会拿到保存前的旧值（改间隔后尤其明显）
+      qc.setQueryData(['source', res.id], res)
+      qc.invalidateQueries({ queryKey: ['source', res.id] })
       qc.invalidateQueries({ queryKey: ['sources'] })
       setMessage(`已保存：${res.slug}`)
       if (!editing) nav(`/sources/${res.id}`)
