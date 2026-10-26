@@ -1,14 +1,93 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Copy, Download, Loader2, Play, Plus, Settings2 } from 'lucide-react'
 import { api } from '../api'
 import { PageHead } from '../App'
-import { Badge, Button, Empty, Panel, fmtTime, relTime } from '../components/ui'
+import { Badge, Button, Empty, fmtTime, relTime } from '../components/ui'
 import { useLive } from '../live'
 import type { SourceView } from '../types'
 
 const kindLabel: Record<string, string> = { html: '列表', json: '接口', page: '快照', rss: '转发' }
+
+const FEED_FORMATS = [
+  { label: 'RSS', suffix: '.xml', field: 'feed_rss' },
+  { label: 'Atom', suffix: '.atom', field: 'feed_atom' },
+  { label: 'JSON Feed', suffix: '.json', field: 'feed_json' },
+] as const
+
+function FeedCopyMenu({
+  source,
+  onCopied,
+}: {
+  source: SourceView
+  onCopied: (message: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [openUp, setOpenUp] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div ref={boxRef} className="relative">
+      <Button
+        size="sm"
+        variant="ghost"
+        title="复制订阅地址"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          // 表格底部行向下展开会被滚动容器裁掉，空间不够就朝上弹
+          const rect = e.currentTarget.getBoundingClientRect()
+          setOpenUp(window.innerHeight - rect.bottom < 140)
+          setOpen((v) => !v)
+        }}
+      >
+        <Copy size={12} />
+      </Button>
+      {open ? (
+        <div
+          role="menu"
+          className={`absolute right-0 z-20 min-w-[148px] rounded border border-line bg-panel-2 py-1 shadow-lg ${
+            openUp ? 'bottom-full mb-1' : 'top-full mt-1'
+          }`}
+        >
+          {FEED_FORMATS.map((f) => (
+            <button
+              key={f.field}
+              role="menuitem"
+              className="flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left text-[12px] text-muted hover:bg-panel hover:text-ink"
+              onClick={() => {
+                const url = source[f.field]
+                void navigator.clipboard?.writeText(url)
+                onCopied(`已复制 ${f.label}：${url}`)
+                setOpen(false)
+              }}
+            >
+              <span>{f.label}</span>
+              <span className="font-mono text-[10px] text-faint">{f.suffix}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 function statusOf(s: SourceView, running: boolean) {
   if (running) return { text: '运行中', tone: 'accent' as const }
@@ -185,17 +264,7 @@ export default function SourcesPage() {
                             条目
                           </Button>
                         </Link>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          title="复制 RSS 地址"
-                          onClick={() => {
-                            void navigator.clipboard?.writeText(s.feed_rss)
-                            setNotice(`已复制：${s.feed_rss}`)
-                          }}
-                        >
-                          <Copy size={12} />
-                        </Button>
+                        <FeedCopyMenu source={s} onCopied={setNotice} />
                         <Link to={`/sources/${s.id}`}>
                           <Button size="sm" variant="ghost" title="编辑">
                             <Settings2 size={12} />
@@ -220,11 +289,6 @@ export default function SourcesPage() {
           </table>
         )}
       </div>
-      <Panel className="mx-5 my-3 px-3 py-2 text-[11px] text-faint">
-        订阅地址形如 <code className="font-mono text-muted">/f/&lt;slug&gt;.xml</code>
-        ，把域名换成你的部署地址即可。 Atom 用 <code className="font-mono text-muted">.atom</code>
-        ，JSON Feed 用 <code className="font-mono text-muted">.json</code>。
-      </Panel>
     </div>
   )
 }
