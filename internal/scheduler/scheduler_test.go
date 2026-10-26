@@ -66,7 +66,8 @@ func TestPlanNextCronBusyScheduleKeepsCadence(t *testing.T) {
 }
 
 func TestPlanNextEveryDrifts(t *testing.T) {
-	now := time.Now()
+	// 落点会截到整秒，now 带纳秒时 54 分钟整的样本会差不到 1 秒
+	now := time.Now().Truncate(time.Second)
 	next, _, _ := planNext(srcWith(60, "@every 1h", 0), now, false)
 	within(t, next, now, 54*time.Minute, 66*time.Minute, "@every 按固定间隔漂移")
 }
