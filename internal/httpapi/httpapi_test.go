@@ -114,8 +114,9 @@ func TestUpdateSourceReschedulesOnPolicyChange(t *testing.T) {
 	src.Policy.IntervalSec = 600
 	start := time.Now()
 	first := putSource(t, srv, src)
+	// 落库时间按秒截断，间隔本身又带 ±1 分钟漂移，这里留 1 秒截断余量
 	wait := time.Unix(first.NextRunAt, 0).Sub(start)
-	if wait < 540*time.Second || wait > 660*time.Second {
+	if wait < 9*time.Minute-time.Second || wait > 11*time.Minute+time.Second {
 		t.Fatalf("改间隔后下次运行应在 9~11 分钟后，实际 %s", wait)
 	}
 	stored, err := st.GetSource(src.ID)
