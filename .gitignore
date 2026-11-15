@@ -39,6 +39,7 @@ desktop.ini
 .continue/
 .windsurf/
 .aider*
+.zcode/
 
 # 本地环境
 .env
