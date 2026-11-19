@@ -120,6 +120,12 @@ export interface SourceView extends Source {
   feed_json: string
 }
 
+/** 去掉列表视图的派生字段，得到可回写后端的 Source。 */
+export function toSource(v: SourceView): Source {
+  const { entry_count: _ec, feed_rss: _fr, feed_atom: _fa, feed_json: _fj, ...src } = v
+  return src
+}
+
 export interface Entry {
   id: number
   source_id: number

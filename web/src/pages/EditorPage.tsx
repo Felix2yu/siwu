@@ -33,8 +33,8 @@ import {
   blankSource,
   intervalMinutes,
   intervalSeconds,
+  toSource,
 } from '../types'
-import type { SourceView } from '../types'
 
 const FIELD_NAMES = ['title', 'link', 'date', 'summary', 'category', 'content'] as const
 // 兜底列表：服务端 /api/transforms 会返回权威全集
@@ -91,11 +91,6 @@ function emptyField(): FieldSpec {
     template: '',
     transforms: [],
   }
-}
-
-function toSource(v: SourceView): Source {
-  const { entry_count: _ec, feed_rss: _fr, feed_atom: _fa, feed_json: _fj, ...src } = v
-  return src
 }
 
 export default function EditorPage() {

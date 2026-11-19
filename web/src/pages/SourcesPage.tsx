@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { useEffect, useRef, useState } from 'react'
-import { Copy, Download, Loader2, Play, Plus, Settings2 } from 'lucide-react'
+import { Copy, Download, Loader2, Play, Plus, Power, Settings2 } from 'lucide-react'
 import { api } from '../api'
 import { PageHead } from '../App'
 import { Badge, Button, Empty, fmtTime, relTime } from '../components/ui'
 import { useLive } from '../live'
-import type { SourceView } from '../types'
+import { toSource, type SourceView } from '../types'
 
 const kindLabel: Record<string, string> = { html: '列表', json: '接口', page: '快照', rss: '转发' }
 
@@ -142,6 +142,20 @@ export default function SourcesPage() {
     },
   })
 
+  const toggle = useMutation({
+    mutationFn: (s: SourceView) => api.updateSource({ ...toSource(s), enabled: !s.enabled }),
+    onSuccess: (res) => {
+      setNotice(
+        res.enabled
+          ? `已启用「${res.name}」，将按计划定时抓取`
+          : `已停用「${res.name}」，不再定时抓取`,
+      )
+      qc.invalidateQueries({ queryKey: ['sources'] })
+      qc.invalidateQueries({ queryKey: ['stats'] })
+    },
+    onError: (err) => setNotice(err instanceof Error ? err.message : '操作失败'),
+  })
+
   return (
     <div className="flex h-full flex-col">
       <PageHead
@@ -270,6 +284,15 @@ export default function SourcesPage() {
                             <Settings2 size={12} />
                           </Button>
                         </Link>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title={s.enabled ? '停用后不再定时抓取' : '启用后按计划定时抓取'}
+                          onClick={() => toggle.mutate(s)}
+                          disabled={toggle.isPending}
+                        >
+                          <Power size={12} /> {s.enabled ? '停用' : '启用'}
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"
