@@ -6,14 +6,14 @@ require (
 	github.com/andybalholm/cascadia v1.3.5
 	github.com/antchfx/htmlquery v1.3.7
 	github.com/antchfx/xpath v1.3.9
-	github.com/chromedp/cdproto v0.160.3
-	github.com/chromedp/chromedp v0.23.1
+	github.com/chromedp/cdproto v0.160.8
+	github.com/chromedp/chromedp v0.24.0
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
 	github.com/gorilla/feeds v1.2.0
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/unraid/apprise-go v0.4.0
-	golang.org/x/net v0.62.0
-	modernc.org/sqlite v1.62.0
+	golang.org/x/net v0.63.0
+	modernc.org/sqlite v1.63.0
 )
 
 require (
@@ -34,11 +34,11 @@ require (
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/rabbitmq/amqp091-go v1.16.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/crypto v0.58.0 // indirect
+	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/mod v0.42.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 	golang.org/x/tools v0.52.0 // indirect
 	mellium.im/reader v0.1.0 // indirect
 	mellium.im/sasl v0.3.2 // indirect
